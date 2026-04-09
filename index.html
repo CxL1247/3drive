@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3Drive Scanner — Price + RSI + BB Squeeze</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0e1a;
+    --bg2: #0d1b2e;
+    --bg3: #070d18;
+    --border: #1e2d42;
+    --border2: #0f1e32;
+    --text: #c8d6e5;
+    --muted: #4a6080;
+    --blue: #00d4ff;
+    --green: #00d4aa;
+    --red: #ff4466;
+    --amber: #ffaa00;
+    --orange: #ff6b35;
+  }
+  html { font-size: 16px; }
+  body {
+    font-family: 'Courier New', Courier, monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    padding: 0.75rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo { font-size: 1rem; font-weight: 700; letter-spacing: 3px; color: var(--blue); text-transform: uppercase; }
+  .logo span { color: var(--orange); }
+  .logo-sub { font-size: 0.6rem; color: var(--muted); letter-spacing: 1px; margin-top: 2px; }
+  .topbar-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .source-badge {
+    font-size: 0.6rem; color: var(--blue);
+    border: 1px solid rgba(0,212,255,0.3);
+    padding: 3px 10px; border-radius: 3px; letter-spacing: 1px;
+  }
+
+  /* ── AUTO-REFRESH COUNTDOWN ── */
+  .auto-refresh {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 5px 12px;
+    font-size: 0.65rem; color: var(--muted);
+  }
+  .auto-refresh label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .auto-refresh input[type="checkbox"] { cursor: pointer; accent-color: var(--blue); }
+  .countdown { color: var(--blue); font-weight: 700; min-width: 38px; }
+  .ar-select {
+    background: transparent; border: none; color: var(--muted);
+    font-family: inherit; font-size: 0.65rem; cursor: pointer; outline: none;
+  }
+  .ar-select option { background: var(--bg2); }
+
+  /* ── MAIN ── */
+  .main { max-width: 1300px; margin: 0 auto; padding: 1.5rem 2rem; }
+
+  /* ── CONTROLS ROW ── */
+  .controls-row {
+    display: flex; gap: 10px; align-items: center;
+    flex-wrap: wrap; margin-bottom: 1.2rem;
+  }
+  .ctrl-label { font-size: 0.62rem; color: var(--muted); letter-spacing: 1px; }
+  select.ctrl {
+    background: var(--bg2); border: 1px solid var(--border);
+    color: #8899aa; padding: 6px 10px;
+    font-size: 0.72rem; font-family: inherit;
+    cursor: pointer; border-radius: 3px; outline: none;
+  }
+  select.ctrl:focus { border-color: var(--blue); }
+  .tf-group { display: flex; gap: 4px; }
+  .tf-btn {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--muted); padding: 5px 12px;
+    font-size: 0.68rem; font-family: inherit;
+    cursor: pointer; border-radius: 3px; transition: all 0.15s;
+  }
+  .tf-btn.active { background: var(--bg2); border-color: var(--blue); color: var(--blue); }
+  .btn {
+    background: transparent; border: 1px solid var(--border);
+    color: #8899aa; padding: 7px 18px;
+    font-size: 0.72rem; font-family: inherit;
+    cursor: pointer; letter-spacing: 1px;
+    border-radius: 3px; transition: all 0.15s;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+  .btn.primary { border-color: var(--blue); color: var(--blue); }
+  .btn.scanning { border-color: var(--orange); color: var(--orange); animation: pulse 1s infinite; }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  /* ── STATS ── */
+  .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 1.2rem; }
+  .stat-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 0.9rem 1rem;
+  }
+  .stat-label { font-size: 0.6rem; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 5px; }
+  .stat-value { font-size: 1.5rem; font-weight: 700; }
+  .stat-value.blue { color: var(--blue); }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red { color: var(--red); }
+  .stat-value.amber { color: var(--amber); }
+  .stat-sub { font-size: 0.58rem; color: var(--muted); margin-top: 3px; }
+
+  /* ── PROGRESS ── */
+  .progress-wrap { margin-bottom: 1rem; }
+  .progress-bar { height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--blue), var(--green)); border-radius: 1px; transition: width 0.15s; }
+  .progress-label { font-size: 0.6rem; color: var(--muted); margin-top: 4px; letter-spacing: 0.5px; }
+
+  /* ── FILTERS ── */
+  .filters { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+  .filter-btn {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--muted); padding: 4px 12px;
+    font-size: 0.65rem; font-family: inherit;
+    cursor: pointer; border-radius: 3px; transition: all 0.15s;
+  }
+  .filter-btn.active { background: var(--border); color: var(--text); border-color: #2e4060; }
+
+  /* ── TABLE ── */
+  .table-wrap {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 6px; overflow: hidden;
+  }
+  .table-header, .token-row {
+    display: grid;
+    grid-template-columns: 42px 1.2fr 90px 80px 75px 75px 75px 95px 110px;
+    padding: 0.6rem 1.2rem;
+    align-items: center;
+  }
+  .table-header {
+    border-bottom: 1px solid var(--border);
+    font-size: 0.6rem; color: var(--muted);
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+  .token-row {
+    border-bottom: 1px solid var(--border2);
+    transition: background 0.1s;
+  }
+  .token-row:hover { background: var(--border2); }
+  .token-row:last-child { border-bottom: none; }
+  .rank { font-size: 0.65rem; color: var(--muted); }
+  .token-info { display: flex; flex-direction: column; }
+  .token-symbol { font-size: 0.82rem; font-weight: 700; color: var(--text); letter-spacing: 0.5px; }
+  .token-name { font-size: 0.6rem; color: var(--muted); margin-top: 1px; }
+  .price { font-size: 0.78rem; color: var(--text); }
+  .change { font-size: 0.74rem; }
+  .change.up { color: var(--green); }
+  .change.down { color: var(--red); }
+  .pattern-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 8px; border-radius: 3px;
+    font-size: 0.6rem; font-weight: 700; letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+  .pattern-badge.bullish { background: rgba(0,212,170,.12); color: var(--green); border: 1px solid rgba(0,212,170,.25); }
+  .pattern-badge.bearish { background: rgba(255,68,102,.12); color: var(--red); border: 1px solid rgba(255,68,102,.25); }
+  .pattern-badge.none { background: rgba(74,96,128,.1); color: var(--muted); border: 1px solid rgba(74,96,128,.15); font-weight: 400; }
+  .pattern-badge.loading { background: rgba(255,170,0,.08); color: var(--amber); border: 1px solid rgba(255,170,0,.15); animation: pulse 1s infinite; }
+  .pattern-badge.squeeze { background: rgba(160,80,255,0.12); color: #c87aff; border: 1px solid rgba(160,80,255,0.3); }
+  .pattern-badge.squeeze-strong { background: rgba(255,80,220,0.14); color: #ff80ee; border: 1px solid rgba(255,80,220,0.35); animation: squeeze-glow 2s infinite; }
+  @keyframes squeeze-glow { 0%,100%{border-color:rgba(255,80,220,0.35)} 50%{border-color:rgba(255,80,220,0.8)} }
+  .bb-bar { width: 55px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 2px; }
+  .bb-fill { height: 100%; border-radius: 2px; background: #c87aff; transition: width 0.3s; }
+  .sq-label { font-size: 0.58rem; color: #c87aff; letter-spacing: 0.5px; }
+  .conf-num { font-size: 0.72rem; }
+  .conf-bar { width: 55px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .conf-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+  .conf-fill.high { background: var(--green); }
+  .conf-fill.mid { background: var(--amber); }
+  .conf-fill.low { background: var(--muted); }
+  .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); font-size: 0.75rem; letter-spacing: 1px; line-height: 2; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .dot.g { background: var(--green); }
+  .dot.r { background: var(--red); }
+
+  /* ── LOG ── */
+  .log-wrap { margin-top: 1rem; }
+  .log-toggle { font-size: 0.6rem; color: var(--muted); cursor: pointer; letter-spacing: 1px; margin-bottom: 4px; user-select: none; }
+  .log-toggle:hover { color: var(--text); }
+  .log-panel {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 4px; padding: 0.8rem;
+    max-height: 130px; overflow-y: auto;
+  }
+  .log-line { font-size: 0.6rem; color: var(--muted); margin-bottom: 2px; line-height: 1.6; }
+  .log-line.ok { color: var(--green); }
+  .log-line.warn { color: var(--amber); }
+  .log-line.err { color: var(--red); }
+
+  /* ── LAST SCAN ── */
+  .last-scan { font-size: 0.6rem; color: var(--muted); letter-spacing: 0.5px; }
+
+  /* ── FOOTER ── */
+  .footer {
+    margin-top: 2rem; padding: 1rem 2rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.58rem; color: var(--muted);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 900px) {
+    .table-header, .token-row {
+      grid-template-columns: 36px 1fr 75px 65px 65px 65px 65px 80px 85px;
+      font-size: 0.65rem; padding: 0.5rem 0.8rem;
+    }
+    .main { padding: 1rem; }
+    .stats-row { grid-template-columns: repeat(2,1fr); }
+  }
+
+  /* ── MOBILE CARD LAYOUT ── */
+  @media (max-width: 620px) {
+    .topbar { padding: 0.6rem 1rem; flex-wrap: wrap; gap: 8px; }
+    .topbar-right { gap: 6px; }
+    .main { padding: 0.75rem; }
+    .stats-row { grid-template-columns: repeat(2,1fr); gap: 8px; }
+    .stat-value { font-size: 1.2rem; }
+    .controls-row { gap: 6px; }
+    .filters { gap: 5px; }
+    .table-wrap { display: none; }
+    #cardList { display: block; }
+  }
+  @media (min-width: 621px) {
+    #cardList { display: none; }
+  }
+  #cardList { margin-top: 0; }
+  .token-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 0.8rem 1rem; margin-bottom: 8px;
+  }
+  .token-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .token-card-name { display: flex; flex-direction: column; }
+  .token-card-sym { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+  .token-card-full { font-size: 0.6rem; color: var(--muted); }
+  .token-card-price { text-align: right; }
+  .token-card-usd { font-size: 0.82rem; color: var(--text); }
+  .token-card-chg { font-size: 0.7rem; }
+  .token-card-signals { display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; margin-bottom: 6px; }
+  .signal-cell { display: flex; flex-direction: column; gap: 2px; }
+  .signal-tf { font-size: 0.55rem; color: var(--muted); letter-spacing: 1px; margin-bottom: 1px; }
+  .token-card-bottom { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border2); padding-top: 6px; margin-top: 2px; }
+  .card-conf { text-align: right; font-size: 0.72rem; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div>
+    <div class="logo">3<span>DRIVE</span> SCANNER</div>
+    <div class="logo-sub">3-drive · rsi divergence · bollinger band squeeze</div>
+  </div>
+  <div class="topbar-right">
+    <span class="source-badge">COINBASE + BINANCE</span>
+    <div class="auto-refresh" id="arWidget">
+      <label>
+        <input type="checkbox" id="arEnabled" onchange="toggleAutoRefresh()">
+        auto-scan
+      </label>
+      <select class="ar-select" id="arInterval" onchange="resetCountdown()">
+        <option value="900">15m</option>
+        <option value="1800" selected>30m</option>
+        <option value="3600">1h</option>
+        <option value="7200">2h</option>
+        <option value="14400">4h</option>
+      </select>
+      <span class="countdown" id="arCountdown">—</span>
+    </div>
+    <span class="last-scan" id="lastScan">not scanned yet</span>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- CONTROLS -->
+  <div class="controls-row">
+    <span class="ctrl-label">tokens:</span>
+    <select class="ctrl" id="topN">
+      <option value="20">Top 20</option>
+      <option value="30">Top 30</option>
+      <option value="50">Top 50</option>
+      <option value="100" selected>Top 100</option>
+    </select>
+    <span class="ctrl-label">timeframes:</span>
+    <div class="tf-group">
+      <button class="tf-btn active" data-tf="SIX_HOUR">4H</button>
+      <button class="tf-btn active" data-tf="ONE_HOUR">1H</button>
+      <button class="tf-btn active" data-tf="THIRTY_MINUTE">30M</button>
+    </div>
+    <button class="btn primary" id="scanBtn" onclick="startScan()">▶ SCAN NOW</button>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-row" style="grid-template-columns:repeat(5,1fr)">
+    <div class="stat-card">
+      <div class="stat-label">scanned</div>
+      <div class="stat-value blue" id="s-scanned">0</div>
+      <div class="stat-sub">tokens processed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">bullish setups</div>
+      <div class="stat-value green" id="s-bull">0</div>
+      <div class="stat-sub">3-drive + rsi div</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">bearish setups</div>
+      <div class="stat-value red" id="s-bear">0</div>
+      <div class="stat-sub">3-drive + rsi div</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">bb squeezing</div>
+      <div class="stat-value" style="color:#c87aff" id="s-squeeze">0</div>
+      <div class="stat-sub">any timeframe</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">high confidence</div>
+      <div class="stat-value amber" id="s-hconf">0</div>
+      <div class="stat-sub">≥70% score</div>
+    </div>
+  </div>
+
+  <!-- PROGRESS -->
+  <div class="progress-wrap">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    <div class="progress-label" id="progressLabel">idle</div>
+  </div>
+
+  <!-- FILTERS -->
+  <div class="filters">
+    <span class="ctrl-label">show:</span>
+    <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+    <button class="filter-btn" onclick="setFilter('bullish',this)">Bullish only</button>
+    <button class="filter-btn" onclick="setFilter('bearish',this)">Bearish only</button>
+    <button class="filter-btn" onclick="setFilter('signal',this)">Has signal</button>
+    <button class="filter-btn" onclick="setFilter('squeeze',this)">BB Squeezing</button>
+    <button class="filter-btn" onclick="setFilter('hconf',this)">High conf ≥70%</button>
+    <span class="ctrl-label" style="margin-left:8px">sort:</span>
+    <select class="ctrl" id="sortBy" onchange="renderTable()">
+      <option value="rank">Market cap rank</option>
+      <option value="confidence">Confidence</option>
+      <option value="signals">Signal count</option>
+    </select>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-wrap">
+    <div class="table-header">
+      <div>#</div>
+      <div>Token</div>
+      <div>Price</div>
+      <div>24h %</div>
+      <div>4H</div>
+      <div>1H</div>
+      <div>30M</div>
+      <div>BB Squeeze</div>
+      <div>Confidence</div>
+    </div>
+    <div id="tableBody">
+      <div class="empty-state">
+        Press <strong>SCAN NOW</strong> to fetch the top tokens and detect<br>
+        3-Drive patterns, RSI divergence, and Bollinger Band squeezes.<br><br>
+        <span style="color:#2e4060">bearish = price 3 higher highs + rsi 3 lower highs<br>
+        bullish = price 3 lower lows + rsi 3 higher lows<br>
+        squeeze = bb width in bottom 20th percentile of recent history</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MOBILE CARD LIST -->
+  <div id="cardList"></div>
+
+  <!-- LOG -->
+  <div class="log-wrap">
+    <div class="log-toggle" onclick="toggleLog()">▾ scan log</div>
+    <div class="log-panel" id="logPanel"></div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <span>3Drive Scanner · price data via Coinbase Advanced Trade + Binance fallback · rankings via CoinGecko</span>
+  <span>3-pivot harmonic divergence · rsi period 14 · bb period 20 · squeeze = bottom 20th percentile of 50-candle width history · for informational use only</span>
+</div>
+
+<script>
+// ── STATE ──
+let tokenData = [];
+let activeFilter = 'all';
+let scanning = false;
+let arTimer = null;
+let arRemaining = 0;
+let activeTFs = { 'SIX_HOUR': true, 'ONE_HOUR': true, 'THIRTY_MINUTE': true };
+
+const TF_LABELS = { 'SIX_HOUR':'4H', 'ONE_HOUR':'1H', 'THIRTY_MINUTE':'30M' };
+const TF_GRAN   = { 'SIX_HOUR':21600, 'ONE_HOUR':3600, 'THIRTY_MINUTE':1800 };
+const RSI_PERIOD = 14;
+const BB_PERIOD  = 20;
+const BB_STDDEV  = 2;
+const SQUEEZE_LOOKBACK = 50; // candles to compare current width against
+
+const STABLES = new Set([
+  'USDT','USDC','BUSD','DAI','TUSD','USDP','FDUSD','USDD','FRAX','LUSD','SUSD',
+  'GUSD','HUSD','USDN','USDX','CUSD','CEUR','UST','USTC','MIM','OUSD','DOLA',
+  'EURC','PYUSD','USDZ','USDB','ALUSD','VUSD','EURS','SEUR','XSGD',
+  'WBTC','WETH','STETH','RETH','CBETH','WSTETH','BETH','SBTC','RENBTC',
+  'PAXG','XAUT','CACHE'
+]);
+
+// ── TF BUTTONS ──
+document.querySelectorAll('.tf-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tf = btn.dataset.tf;
+    activeTFs[tf] = !activeTFs[tf];
+    btn.classList.toggle('active', activeTFs[tf]);
+  });
+});
+
+// ── LOG ──
+function log(msg, type='') {
+  const p = document.getElementById('logPanel');
+  const d = document.createElement('div');
+  d.className = 'log-line ' + type;
+  d.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+  p.appendChild(d);
+  p.scrollTop = p.scrollHeight;
+}
+function toggleLog() {
+  const p = document.getElementById('logPanel');
+  const t = document.querySelector('.log-toggle');
+  const show = p.style.display === 'none';
+  p.style.display = show ? 'block' : 'none';
+  t.textContent = (show ? '▾' : '▸') + ' scan log';
+}
+
+// ── FILTER ──
+function setFilter(f, el) {
+  activeFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderTable();
+}
+
+// ── AUTO-REFRESH ──
+// Uses Date.now() timestamps instead of interval counting so background
+// tab throttling doesn't drift or pause the countdown.
+let arTargetTime = null; // epoch ms when next scan should fire
+
+function toggleAutoRefresh() {
+  const enabled = document.getElementById('arEnabled').checked;
+  if(enabled) { resetCountdown(); }
+  else {
+    clearInterval(arTimer); arTimer=null;
+    arTargetTime=null;
+    document.getElementById('arCountdown').textContent='—';
+  }
+}
+function resetCountdown() {
+  clearInterval(arTimer);
+  const enabled = document.getElementById('arEnabled').checked;
+  if(!enabled) return;
+  const intervalSec = parseInt(document.getElementById('arInterval').value);
+  arTargetTime = Date.now() + intervalSec * 1000;
+  arTimer = setInterval(tickCountdown, 500); // tick every 500ms — handles throttling
+}
+function tickCountdown() {
+  if(!arTargetTime) return;
+  const remaining = Math.max(0, Math.ceil((arTargetTime - Date.now()) / 1000));
+  arRemaining = remaining;
+  updateCountdownDisplay();
+  if(remaining <= 0) {
+    resetCountdown();
+    if(!scanning) startScan();
+  }
+}
+function updateCountdownDisplay() {
+  const m = Math.floor(arRemaining/60);
+  const s = arRemaining % 60;
+  document.getElementById('arCountdown').textContent = m+'m'+String(s).padStart(2,'0')+'s';
+}
+
+// Page Visibility API — when tab becomes visible again, check if scan is overdue
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible' && arTargetTime) {
+    if(Date.now() >= arTargetTime) {
+      resetCountdown();
+      if(!scanning) startScan();
+    } else {
+      tickCountdown(); // immediately refresh display
+    }
+  }
+});
+
+// ── RSI ──
+function calcRSI(closes, period=14) {
+  if(closes.length < period+1) return [];
+  let gains=[], losses=[];
+  for(let i=1;i<closes.length;i++){
+    const d=closes[i]-closes[i-1];
+    gains.push(d>0?d:0);
+    losses.push(d<0?Math.abs(d):0);
+  }
+  let avgG=gains.slice(0,period).reduce((a,b)=>a+b)/period;
+  let avgL=losses.slice(0,period).reduce((a,b)=>a+b)/period;
+  const rsi=[];
+  for(let i=period;i<gains.length;i++){
+    avgG=(avgG*(period-1)+gains[i])/period;
+    avgL=(avgL*(period-1)+losses[i])/period;
+    rsi.push(avgL===0?100:100-(100/(1+avgG/avgL)));
+  }
+  return rsi;
+}
+
+// ── BOLLINGER BAND SQUEEZE ──
+// Returns: { squeezing: bool, strength: 0-100, duration: number, width: number }
+// Squeeze = upper band actively sloping down AND lower band actively sloping up
+// for at least MIN_SQUEEZE_BARS consecutive candles, AND current width is below
+// its recent average — so random 1-2 candle pinches are ignored.
+const MIN_SQUEEZE_BARS = 4;
+function calcBBSqueeze(closes, period=BB_PERIOD, mult=BB_STDDEV, lookback=SQUEEZE_LOOKBACK) {
+  if(closes.length < period + lookback) return { squeezing: false, strength: 0, duration: 0, width: 0 };
+
+  // Compute upper band, lower band, normalised width for every candle
+  const upperArr=[], lowerArr=[], widths=[];
+  for(let i = period - 1; i < closes.length; i++){
+    const slice = closes.slice(i - period + 1, i + 1);
+    const mean  = slice.reduce((a,b) => a+b, 0) / period;
+    const sd    = Math.sqrt(slice.reduce((a,b) => a+(b-mean)**2, 0) / period);
+    upperArr.push(mean + mult * sd);
+    lowerArr.push(mean - mult * sd);
+    widths.push((mult * 2 * sd) / mean);
+  }
+
+  const n = widths.length;
+  const currentWidth = widths[n-1];
+  const avgWidth     = widths.slice(-lookback).reduce((a,b)=>a+b,0) / lookback;
+
+  // Width must be below its recent average — filters wide-band false positives
+  const widthCompressed = currentWidth < avgWidth;
+
+  // Count consecutive candles where upper is falling AND lower is rising
+  let duration = 0;
+  for(let i = n-1; i >= 1; i--){
+    if(upperArr[i] < upperArr[i-1] && lowerArr[i] > lowerArr[i-1]) duration++;
+    else break;
+  }
+
+  const squeezing = widthCompressed && duration >= MIN_SQUEEZE_BARS;
+
+  // Strength: compression ratio weighted with duration bonus
+  const compressionRatio = Math.max(0, 1 - currentWidth / avgWidth);
+  const durationBonus    = Math.min(duration / 20, 1);
+  const strength         = Math.round((compressionRatio * 0.7 + durationBonus * 0.3) * 100);
+
+  return { squeezing, strength, duration, width: currentWidth };
+}
+
+function getSqueezeBadgeHTML(token) {
+  const squeezes = Object.entries(token.squeeze || {})
+    .filter(([tf, s]) => activeTFs[tf] && s && s.squeezing);
+
+  if(Object.values(token.squeeze || {}).every(s => s === null)) {
+    return '<div class="pattern-badge loading">...</div>';
+  }
+  if(!squeezes.length) return '<div class="pattern-badge none">—</div>';
+
+  // Find tightest squeeze across TFs
+  const strongest = squeezes.reduce((best, [tf,s]) => s.strength > (best[1]?.strength||0) ? [tf,s] : best, ['',null]);
+  const [tf, sq] = strongest;
+  const label = TF_LABELS[tf];
+  const cls = sq.strength >= 80 ? 'squeeze-strong' : 'squeeze';
+  const tfs = squeezes.map(([t]) => TF_LABELS[t]).join('+');
+  return `<div style="display:flex;flex-direction:column;gap:2px">
+    <div class="pattern-badge ${cls}">◈ SQZ ${tfs}</div>
+    <div class="bb-bar"><div class="bb-fill" style="width:${sq.strength}%"></div></div>
+    <span class="sq-label">${sq.duration}c · ${sq.strength}%</span>
+  </div>`;
+}
+function findPivots(arr, win=3) {
+  const highs=[],lows=[];
+  for(let i=win;i<arr.length-win;i++){
+    let isH=true,isL=true;
+    for(let j=i-win;j<=i+win;j++){
+      if(j!==i){
+        if(arr[j]>=arr[i]) isH=false;
+        if(arr[j]<=arr[i]) isL=false;
+      }
+    }
+    if(isH) highs.push({idx:i,val:arr[i]});
+    if(isL) lows.push({idx:i,val:arr[i]});
+  }
+  return {highs,lows};
+}
+
+// ── 3-DRIVE DETECTION ──
+// Time symmetry bonus: the three drives should be roughly equally spaced in time.
+// We measure the gap between drive1→drive2 vs drive2→drive3 and reward similarity.
+function timeSym(p1, p2, p3){
+  const gap1 = p2.idx - p1.idx;
+  const gap2 = p3.idx - p2.idx;
+  if(gap1 <= 0 || gap2 <= 0) return 0;
+  const ratio = Math.min(gap1, gap2) / Math.max(gap1, gap2); // 1.0 = perfect symmetry
+  return Math.round(ratio * 10); // max +10 pts bonus
+}
+
+function detect3Drive(closes, rsiArr) {
+  if(closes.length<50||rsiArr.length<30) return {signal:'none',confidence:0};
+  const pp=findPivots(closes,3);
+  const rp=findPivots(rsiArr,3);
+
+  // Bearish: price 3 higher highs + RSI 3 lower highs
+  const priceHighs=pp.highs.slice(-6);
+  const rsiHighs=rp.highs.slice(-6);
+  if(priceHighs.length>=3&&rsiHighs.length>=3){
+    const ph=priceHighs.slice(-3);
+    const rh=rsiHighs.slice(-3);
+    const priceRising=ph[1].val>ph[0].val*1.003&&ph[2].val>ph[1].val*1.003;
+    const rsiFalling=rh[1].val<rh[0].val-0.5&&rh[2].val<rh[1].val-0.5;
+    if(priceRising&&rsiFalling){
+      const pdiv=(ph[2].val-ph[0].val)/ph[0].val*100;
+      const rdiv=rh[0].val-rh[2].val;
+      const symBonus=timeSym(ph[0],ph[1],ph[2]);
+      const conf=Math.min(95,38+Math.min(rdiv*2,32)+Math.min(pdiv*3,25)+symBonus);
+      return {signal:'bearish',confidence:Math.round(conf)};
+    }
+  }
+
+  // Bullish: price 3 lower lows + RSI 3 higher lows
+  const priceLows=pp.lows.slice(-6);
+  const rsiLows=rp.lows.slice(-6);
+  if(priceLows.length>=3&&rsiLows.length>=3){
+    const pl=priceLows.slice(-3);
+    const rl=rsiLows.slice(-3);
+    const priceFalling=pl[1].val<pl[0].val*0.997&&pl[2].val<pl[1].val*0.997;
+    const rsiRising=rl[1].val>rl[0].val+0.5&&rl[2].val>rl[1].val+0.5;
+    if(priceFalling&&rsiRising){
+      const pdiv=(pl[0].val-pl[2].val)/pl[0].val*100;
+      const rdiv=rl[2].val-rl[0].val;
+      const symBonus=timeSym(pl[0],pl[1],pl[2]);
+      const conf=Math.min(95,38+Math.min(rdiv*2,32)+Math.min(pdiv*3,25)+symBonus);
+      return {signal:'bullish',confidence:Math.round(conf)};
+    }
+  }
+  return {signal:'none',confidence:0};
+}
+
+// ── PROXY HELPER ──
+// All external API calls go through the Netlify proxy function to avoid CORS issues
+function proxyFetch(url) {
+  return fetch('/.netlify/functions/proxy?url=' + encodeURIComponent(url));
+}
+
+// ── FETCH CANDLES (Coinbase primary, Binance fallback) ──
+// Returns { closes, highs, lows } or null
+async function fetchCandles(productId, symbol, tfKey, onCoinbase=true) {
+  const gran = TF_GRAN[tfKey];
+  const end = Math.floor(Date.now()/1000);
+  const start = end - (gran * 300);
+
+  // Try Coinbase first (only if token is listed there)
+  if(onCoinbase){
+    try {
+      const url=`https://api.coinbase.com/api/v3/brokerage/market/products/${productId}/candles?start=${start}&end=${end}&granularity=${tfKey}&limit=300`;
+      const r=await proxyFetch(url);
+      if(r.ok){
+        const data=await r.json();
+        if(data.candles&&data.candles.length>=40){
+          const candles = data.candles.reverse();
+          return {
+            closes: candles.map(c=>parseFloat(c.close)),
+            highs:  candles.map(c=>parseFloat(c.high)),
+            lows:   candles.map(c=>parseFloat(c.low)),
+            source: 'coinbase'
+          };
+        }
+      }
+    } catch(e){}
+  }
+
+  // Binance fallback
+  try {
+    const binTF=tfKey==='SIX_HOUR'?'4h':tfKey==='ONE_HOUR'?'1h':'30m';
+    const r2=await proxyFetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}USDT&interval=${binTF}&limit=300`);
+    if(r2.ok){
+      const bd=await r2.json();
+      if(Array.isArray(bd)&&bd.length>=40) return {
+        closes: bd.map(c=>parseFloat(c[4])),
+        highs:  bd.map(c=>parseFloat(c[2])),
+        lows:   bd.map(c=>parseFloat(c[3])),
+        source: 'binance'
+      };
+    }
+  } catch(e){}
+
+  return null;
+}
+
+// ── FETCH TOP TOKENS ──
+async function fetchTopTokens(n) {
+  log('Fetching Coinbase product list...','warn');
+  let cbSymbols=new Set();
+  try {
+    const r=await proxyFetch('https://api.coinbase.com/api/v3/brokerage/market/products?product_type=SPOT&limit=500');
+    if(r.ok){
+      const d=await r.json();
+      if(d.products){
+        d.products.filter(p=>['USD','USDT','USDC'].includes(p.quote_currency_id))
+                  .forEach(p=>cbSymbols.add(p.base_currency_id));
+        log(`Coinbase: ${cbSymbols.size} spot markets found`,'ok');
+      }
+    }
+  } catch(e){ log('Coinbase product list unavailable','err'); }
+
+  log('Fetching CoinGecko market cap rankings...','warn');
+  try {
+    // Fetch enough pages to account for stablecoin filtering
+    // Top 100 requested → fetch 200 raw to guarantee 100 non-stables
+    const rawTarget = Math.ceil(n * 2);
+    const pages = Math.ceil(rawTarget / 100);
+    let all=[];
+    for(let pg=1;pg<=pages;pg++){
+      const r=await proxyFetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=${pg}&sparkline=false&price_change_percentage=24h`);
+      if(!r.ok) break;
+      const batch = await r.json();
+      all=all.concat(batch);
+      if(pg<pages) await new Promise(r=>setTimeout(r,700));
+    }
+    const filtered=all
+      .filter(t=>!STABLES.has(t.symbol.toUpperCase()))
+      .slice(0,n)
+      .map((t,i)=>({
+        rank:i+1, symbol:t.symbol.toUpperCase(), name:t.name,
+        price:t.current_price, change24h:t.price_change_percentage_24h,
+        // Prefer Coinbase product ID if listed there, otherwise Binance will be used as fallback in fetchCandles
+        productId:t.symbol.toUpperCase()+'-USD',
+        onCoinbase: cbSymbols.size===0 || cbSymbols.has(t.symbol.toUpperCase()),
+        patterns:{'SIX_HOUR':null,'ONE_HOUR':null,'THIRTY_MINUTE':null},
+        squeeze:{'SIX_HOUR':null,'ONE_HOUR':null,'THIRTY_MINUTE':null}
+      }));
+    log(`${filtered.length} tokens queued after filtering stablecoins`,'ok');
+    return filtered;
+  } catch(e){
+    log('CoinGecko failed — using fallback list','err');
+    return getFallback(n);
+  }
+}
+
+function getFallback(n){
+  const list=['BTC','ETH','BNB','SOL','XRP','ADA','AVAX','DOGE','DOT','MATIC','LINK','UNI','ATOM','LTC','BCH','XLM','NEAR','APT','ARB','OP','INJ','SUI','TIA','PEPE','WIF','FET','RNDR','IMX','SAND','MANA','CRV','AAVE','MKR','SNX','COMP','YFI','SUSHI','LDO','RPL','GRT','CHZ','AXS','BLUR','ICP','FIL','HBAR','VET','EGLD','THETA','ALGO','XTZ','EOS','ZEC','DASH','NEO','WAVES','IOTA','ONT','ZIL','ICX','QTUM','LSK','DCR','DGB','SC','XEM','BTT','HOT','WIN','TRX','XDC'];
+  return list.slice(0,n).map((s,i)=>({
+    rank:i+1,symbol:s,name:s,price:0,change24h:0,
+    productId:s+'-USD',
+    patterns:{'SIX_HOUR':null,'ONE_HOUR':null,'THIRTY_MINUTE':null},
+    squeeze:{'SIX_HOUR':null,'ONE_HOUR':null,'THIRTY_MINUTE':null}
+  }));
+}
+
+// ── FORMAT HELPERS ──
+function fmtPrice(p){
+  if(!p) return '—';
+  if(p>=1000) return '$'+p.toLocaleString('en',{maximumFractionDigits:0});
+  if(p>=1) return '$'+p.toFixed(2);
+  if(p>=0.01) return '$'+p.toFixed(4);
+  return '$'+p.toFixed(6);
+}
+function getBadge(result,tf){
+  if(!activeTFs[tf]) return '<span style="color:var(--muted);font-size:0.58rem">off</span>';
+  if(!result) return '<div class="pattern-badge loading">...</div>';
+  if(result.signal==='bullish') return '<div class="pattern-badge bullish"><span class="dot g" style="margin-right:3px"></span>BULL</div>';
+  if(result.signal==='bearish') return '<div class="pattern-badge bearish"><span class="dot r" style="margin-right:3px"></span>BEAR</div>';
+  return '<div class="pattern-badge none">—</div>';
+}
+function getConfHTML(token){
+  const sigs=Object.values(token.patterns).filter(p=>p&&p.signal!=='none');
+  if(!sigs.length) return '<span style="color:var(--muted);font-size:0.65rem">no signal</span>';
+  const avg=Math.round(sigs.reduce((a,b)=>a+b.confidence,0)/sigs.length);
+  const cls=avg>=70?'high':avg>=45?'mid':'low';
+  return `<div class="conf-cell"><span class="conf-num" style="color:${avg>=70?'var(--green)':avg>=45?'var(--amber)':'var(--muted)'}">${avg}%</span><div class="conf-bar"><div class="conf-fill ${cls}" style="width:${avg}%"></div></div></div>`;
+}
+
+// ── RENDER MOBILE CARDS ──
+function renderCards(data){
+  const list = document.getElementById('cardList');
+  if(!list) return;
+  if(!data.length){ list.innerHTML='<div class="empty-state">No tokens match the current filter</div>'; return; }
+  list.innerHTML = data.map(t => {
+    const chg = t.change24h;
+    const chgStr = chg!=null ? `<span class="token-card-chg change ${chg>=0?'up':'down'}">${chg>=0?'+':''}${chg.toFixed(2)}%</span>` : '';
+    const tfs = ['SIX_HOUR','ONE_HOUR','THIRTY_MINUTE'];
+    const tfLabels = {'SIX_HOUR':'4H','ONE_HOUR':'1H','THIRTY_MINUTE':'30M'};
+    const signalCells = tfs.map(tf => `
+      <div class="signal-cell">
+        <span class="signal-tf">${tfLabels[tf]}</span>
+        ${getBadge(t.patterns[tf], tf)}
+      </div>`).join('');
+    const sqz = Object.entries(t.squeeze||{}).filter(([tf,s])=>s&&s.squeezing);
+    const sqzHTML = sqz.length
+      ? `<div style="display:flex;flex-direction:column;gap:2px">
+           <div class="pattern-badge ${sqz[0][1].strength>=80?'squeeze-strong':'squeeze'}">◈ SQZ ${sqz.map(([tf])=>tfLabels[tf]).join('+')}</div>
+           <div class="bb-bar"><div class="bb-fill" style="width:${sqz[0][1].strength}%"></div></div>
+           <span class="sq-label">${sqz[0][1].duration}c · ${sqz[0][1].strength}%</span>
+         </div>`
+      : '<span style="color:var(--muted);font-size:0.65rem">no squeeze</span>';
+    const sigs = Object.values(t.patterns).filter(p=>p&&p.signal!=='none');
+    const avg = sigs.length ? Math.round(sigs.reduce((a,b)=>a+b.confidence,0)/sigs.length) : 0;
+    const confColor = avg>=70?'var(--green)':avg>=45?'var(--amber)':'var(--muted)';
+    return `<div class="token-card">
+      <div class="token-card-top">
+        <div class="token-card-name">
+          <span class="token-card-sym">${t.rank}. ${t.symbol}</span>
+          <span class="token-card-full">${t.name}</span>
+        </div>
+        <div class="token-card-price">
+          <div class="token-card-usd">${fmtPrice(t.price)}</div>
+          ${chgStr}
+        </div>
+      </div>
+      <div class="token-card-signals">${signalCells}</div>
+      <div class="token-card-bottom">
+        <div class="card-squeeze">${sqzHTML}</div>
+        <div class="card-conf" style="color:${confColor}">${avg?avg+'% conf':'no signal'}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── RENDER TABLE ──
+function renderTable(){
+  const body=document.getElementById('tableBody');
+  let data=[...tokenData];
+
+  if(activeFilter==='bullish') data=data.filter(t=>Object.values(t.patterns).some(p=>p&&p.signal==='bullish'));
+  if(activeFilter==='bearish') data=data.filter(t=>Object.values(t.patterns).some(p=>p&&p.signal==='bearish'));
+  if(activeFilter==='signal')  data=data.filter(t=>Object.values(t.patterns).some(p=>p&&p.signal!=='none'));
+  if(activeFilter==='squeeze') data=data.filter(t=>Object.values(t.squeeze||{}).some(s=>s&&s.squeezing));
+  if(activeFilter==='hconf')   data=data.filter(t=>{
+    const s=Object.values(t.patterns).filter(p=>p&&p.signal!=='none');
+    return s.length&&s.reduce((a,b)=>a+b.confidence,0)/s.length>=70;
+  });
+
+  const sort=document.getElementById('sortBy').value;
+  if(sort==='confidence'){
+    data.sort((a,b)=>{
+      const as=Object.values(a.patterns).filter(p=>p&&p.signal!=='none');
+      const bs=Object.values(b.patterns).filter(p=>p&&p.signal!=='none');
+      const ac=as.length?as.reduce((x,y)=>x+y.confidence,0)/as.length:0;
+      const bc=bs.length?bs.reduce((x,y)=>x+y.confidence,0)/bs.length:0;
+      return bc-ac;
+    });
+  } else if(sort==='signals'){
+    data.sort((a,b)=>{
+      const as=Object.values(a.patterns).filter(p=>p&&p.signal!=='none').length;
+      const bs=Object.values(b.patterns).filter(p=>p&&p.signal!=='none').length;
+      return bs-as;
+    });
+  }
+
+  if(!data.length){
+    body.innerHTML='<div class="empty-state">No tokens match the current filter</div>';
+    return;
+  }
+
+  body.innerHTML=data.map(t=>{
+    const chg=t.change24h;
+    const chgStr=chg!=null?`<span class="change ${chg>=0?'up':'down'}">${chg>=0?'+':''}${chg.toFixed(2)}%</span>`:'<span style="color:var(--muted)">—</span>';
+    return `<div class="token-row">
+      <div class="rank">${t.rank}</div>
+      <div class="token-info"><span class="token-symbol">${t.symbol}</span><span class="token-name">${t.name}</span></div>
+      <div class="price">${fmtPrice(t.price)}</div>
+      <div>${chgStr}</div>
+      <div>${getBadge(t.patterns['SIX_HOUR'],'SIX_HOUR')}</div>
+      <div>${getBadge(t.patterns['ONE_HOUR'],'ONE_HOUR')}</div>
+      <div>${getBadge(t.patterns['THIRTY_MINUTE'],'THIRTY_MINUTE')}</div>
+      <div>${getSqueezeBadgeHTML(t)}</div>
+      <div>${getConfHTML(t)}</div>
+    </div>`;
+  }).join('');
+
+  updateStats();
+  renderCards(data);
+}
+
+function updateStats(){
+  const scanned=tokenData.filter(t=>Object.values(t.patterns).some(p=>p!==null)).length;
+  const bull=tokenData.filter(t=>Object.values(t.patterns).some(p=>p&&p.signal==='bullish')).length;
+  const bear=tokenData.filter(t=>Object.values(t.patterns).some(p=>p&&p.signal==='bearish')).length;
+  const hconf=tokenData.filter(t=>{
+    const s=Object.values(t.patterns).filter(p=>p&&p.signal!=='none');
+    return s.length&&s.reduce((a,b)=>a+b.confidence,0)/s.length>=70;
+  }).length;
+  const squeeze=tokenData.filter(t=>Object.values(t.squeeze||{}).some(s=>s&&s.squeezing)).length;
+  document.getElementById('s-scanned').textContent=scanned;
+  document.getElementById('s-bull').textContent=bull;
+  document.getElementById('s-bear').textContent=bear;
+  document.getElementById('s-squeeze').textContent=squeeze;
+  document.getElementById('s-hconf').textContent=hconf;
+}
+
+// ── MAIN SCAN ──
+async function startScan(){
+  if(scanning) return;
+  scanning=true;
+  const btn=document.getElementById('scanBtn');
+  btn.textContent='⏳ SCANNING...';
+  btn.className='btn scanning';
+  btn.disabled=true;
+  document.getElementById('logPanel').innerHTML='';
+  document.getElementById('progressFill').style.width='0%';
+  document.getElementById('progressLabel').textContent='initializing...';
+
+  const n=parseInt(document.getElementById('topN').value);
+  const tfs=Object.keys(activeTFs).filter(tf=>activeTFs[tf]);
+  log(`Scan started · top ${n} · TFs: ${tfs.map(t=>TF_LABELS[t]).join(', ')}`);
+
+  tokenData=await fetchTopTokens(n);
+  tokenData.forEach(t=>{
+    tfs.forEach(tf=>{
+      t.patterns[tf]=null;
+      t.squeeze[tf]=null;
+    });
+  });
+  renderTable();
+
+  const total=tokenData.length*tfs.length;
+  let done=0;
+
+  for(let i=0;i<tokenData.length;i++){
+    const token=tokenData[i];
+    document.getElementById('progressLabel').textContent=`scanning ${token.symbol} (${i+1}/${tokenData.length})...`;
+    for(const tf of tfs){
+      try{
+        const ohlc=await fetchCandles(token.productId,token.symbol,tf,token.onCoinbase!==false);
+        if(ohlc&&ohlc.closes.length>=40){
+          const {closes}=ohlc;
+          const rsi=calcRSI(closes,RSI_PERIOD);
+          const result=detect3Drive(closes,rsi);
+          token.patterns[tf]=result;
+          if(result.signal!=='none'){
+            log(`${token.symbol} [${TF_LABELS[tf]}] 3-DRIVE → ${result.signal.toUpperCase()} · ${result.confidence}% · ${ohlc.source}`,result.signal==='bullish'?'ok':'warn');
+          }
+          const sqz=calcBBSqueeze(closes);
+          token.squeeze[tf]=sqz;
+          if(sqz.squeezing){
+            log(`${token.symbol} [${TF_LABELS[tf]}] BB SQUEEZE · ${sqz.strength}% tight · ${sqz.duration}c`,'warn');
+          }
+        } else {
+          token.patterns[tf]={signal:'none',confidence:0};
+          token.squeeze[tf]={squeezing:false,strength:0,duration:0,width:0};
+          log(`${token.symbol} [${TF_LABELS[tf]}] no data — coinbase+binance both failed`,'err');
+        }
+      } catch(e){
+        token.patterns[tf]={signal:'none',confidence:0};
+        token.squeeze[tf]={squeezing:false,strength:0,duration:0,width:0};
+        log(`${token.symbol} [${TF_LABELS[tf]}] ERROR: ${e.message||String(e)}`,'err');
+      }
+
+      done++;
+      document.getElementById('progressFill').style.width=(done/total*100)+'%';
+      if(done%4===0) renderTable();
+      await new Promise(r=>setTimeout(r,110));
+    }
+  }
+
+  renderTable();
+  const now=new Date();
+  document.getElementById('lastScan').textContent='last scan: '+now.toLocaleTimeString();
+  document.getElementById('progressLabel').textContent=`scan complete at ${now.toLocaleTimeString()} · ${tokenData.length} tokens · ${document.getElementById('s-bull').textContent} bull · ${document.getElementById('s-bear').textContent} bear`;
+  log(`Done · Bulls: ${document.getElementById('s-bull').textContent} · Bears: ${document.getElementById('s-bear').textContent} · Squeezing: ${document.getElementById('s-squeeze').textContent} · High conf: ${document.getElementById('s-hconf').textContent}`,'ok');
+
+  btn.textContent='▶ SCAN NOW';
+  btn.className='btn primary';
+  btn.disabled=false;
+  document.getElementById('progressFill').style.width='100%';
+  scanning=false;
+}
+</script>
+</body>
+</html>
