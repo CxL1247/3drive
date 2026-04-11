@@ -186,6 +186,10 @@
   .conf-fill.mid { background: var(--amber); }
   .conf-fill.low { background: var(--muted); }
   .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); font-size: 0.75rem; letter-spacing: 1px; line-height: 2; }
+  .tv-link { cursor: pointer; transition: opacity 0.15s; }
+  .tv-link:hover { opacity: 0.75; }
+  .tv-sym { color: var(--text); cursor: pointer; transition: color 0.15s; }
+  .tv-sym:hover { color: var(--blue); }
   .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
   .dot.g { background: var(--green); }
   .dot.r { background: var(--red); }
@@ -499,17 +503,28 @@ function updateCountdownDisplay() {
   document.getElementById('arCountdown').textContent = m+'m'+String(s).padStart(2,'0')+'s';
 }
 
-// Page Visibility API — when tab becomes visible again, check if scan is overdue
+// Page Visibility API — fires when tab becomes visible again
 document.addEventListener('visibilitychange', () => {
   if(document.visibilityState === 'visible' && arTargetTime) {
     if(Date.now() >= arTargetTime) {
       resetCountdown();
       if(!scanning) startScan();
     } else {
-      tickCountdown(); // immediately refresh display
+      tickCountdown();
     }
   }
 });
+
+// Heartbeat: independent 10s interval as fallback for browsers that throttle
+// setInterval to 1-minute intervals in background tabs (Safari, Chrome battery saver).
+// Uses the same arTargetTime timestamp so it's always accurate regardless of throttling.
+setInterval(() => {
+  if(!arTargetTime) return;
+  if(Date.now() >= arTargetTime) {
+    resetCountdown();
+    if(!scanning) startScan();
+  }
+}, 10000);
 
 // ── RSI ──
 function calcRSI(closes, period=14) {
@@ -532,13 +547,33 @@ function calcRSI(closes, period=14) {
 }
 
 // ── BOLLINGER BAND SQUEEZE ──
-// Returns: { squeezing: bool, strength: 0-100, duration: number, width: number }
-// Squeeze = upper band actively sloping down AND lower band actively sloping up
-// for at least MIN_SQUEEZE_BARS consecutive candles, AND current width is below
-// its recent average — so random 1-2 candle pinches are ignored.
-const MIN_SQUEEZE_BARS = 4;
-function calcBBSqueeze(closes, period=BB_PERIOD, mult=BB_STDDEV, lookback=SQUEEZE_LOOKBACK) {
-  if(closes.length < period + lookback) return { squeezing: false, strength: 0, duration: 0, width: 0 };
+// Returns: { squeezing: bool, strength: 0-100, duration: number, width: number, percentile: number }
+//
+// What your eye sees on the chart is bands that are HISTORICALLY narrow —
+// not just below average, but genuinely tight relative to the full range of
+// widths over the past 100 candles. That's what a percentile rank measures.
+//
+// Three conditions must ALL pass:
+//
+// 1. PERCENTILE RANK — current BB width must be in the bottom 10th percentile
+//    of the last 100 candles of widths. Only the most extreme compressions qualify.
+//    This is what your eye detects: bands nearly touching the midline.
+//
+// 2. WINDOWED SLOPE — upper band now < upper band SLOPE_WIN candles ago AND
+//    lower band now > lower band SLOPE_WIN candles ago. Confirms active convergence,
+//    not just a flat narrow channel sitting still.
+//
+// 3. DURATION — windowed slope must hold for MIN_SQUEEZE_BARS consecutive candles.
+//    Eliminates momentary pinches caused by low-volatility single candles.
+
+const MIN_SQUEEZE_BARS  = 5;    // consecutive bars of active convergence required
+const SLOPE_WIN         = 5;    // candle window for slope measurement
+const SQUEEZE_PERCENTILE = 10;  // must be in bottom 10th percentile of 100-candle history
+const PERCENTILE_LOOKBACK = 100; // candles used for percentile ranking
+
+function calcBBSqueeze(closes, period=BB_PERIOD, mult=BB_STDDEV) {
+  const minLen = period + PERCENTILE_LOOKBACK + SLOPE_WIN;
+  if(closes.length < minLen) return { squeezing: false, strength: 0, duration: 0, width: 0, percentile: 100 };
 
   // Compute upper band, lower band, normalised width for every candle
   const upperArr=[], lowerArr=[], widths=[];
@@ -553,26 +588,37 @@ function calcBBSqueeze(closes, period=BB_PERIOD, mult=BB_STDDEV, lookback=SQUEEZ
 
   const n = widths.length;
   const currentWidth = widths[n-1];
-  const avgWidth     = widths.slice(-lookback).reduce((a,b)=>a+b,0) / lookback;
 
-  // Width must be below its recent average — filters wide-band false positives
-  const widthCompressed = currentWidth < avgWidth;
+  // Gate 1: percentile rank against last 100 candles
+  const histWidths = widths.slice(-PERCENTILE_LOOKBACK);
+  const sorted = [...histWidths].sort((a,b) => a - b);
+  const rank = sorted.findIndex(w => w >= currentWidth);
+  // rank=-1 means currentWidth > all — percentile=100. rank=0 means tightest ever.
+  const percentile = rank === -1 ? 100 : Math.round((rank / sorted.length) * 100);
 
-  // Count consecutive candles where upper is falling AND lower is rising
+  if(percentile > SQUEEZE_PERCENTILE){
+    return { squeezing: false, strength: 0, duration: 0, width: currentWidth, percentile };
+  }
+
+  // Gate 2+3: windowed slope duration — how many consecutive recent candles
+  // show upper falling AND lower rising over the SLOPE_WIN window
   let duration = 0;
-  for(let i = n-1; i >= 1; i--){
-    if(upperArr[i] < upperArr[i-1] && lowerArr[i] > lowerArr[i-1]) duration++;
+  for(let i = n-1; i >= SLOPE_WIN; i--){
+    const upperFalling = upperArr[i] < upperArr[i - SLOPE_WIN];
+    const lowerRising  = lowerArr[i] > lowerArr[i - SLOPE_WIN];
+    if(upperFalling && lowerRising) duration++;
     else break;
   }
 
-  const squeezing = widthCompressed && duration >= MIN_SQUEEZE_BARS;
+  const squeezing = duration >= MIN_SQUEEZE_BARS;
 
-  // Strength: compression ratio weighted with duration bonus
-  const compressionRatio = Math.max(0, 1 - currentWidth / avgWidth);
-  const durationBonus    = Math.min(duration / 20, 1);
-  const strength         = Math.round((compressionRatio * 0.7 + durationBonus * 0.3) * 100);
+  // Strength: 0-100
+  // percentile score: 0th percentile = 100%, 10th percentile = 0%
+  const percentileScore  = Math.round((1 - percentile / SQUEEZE_PERCENTILE) * 70);
+  const durationBonus    = Math.round(Math.min(duration / 15, 1) * 30);
+  const strength         = Math.min(100, percentileScore + durationBonus);
 
-  return { squeezing, strength, duration, width: currentWidth };
+  return { squeezing, strength, duration, width: currentWidth, percentile };
 }
 
 function getSqueezeBadgeHTML(token) {
@@ -593,7 +639,7 @@ function getSqueezeBadgeHTML(token) {
   return `<div style="display:flex;flex-direction:column;gap:2px">
     <div class="pattern-badge ${cls}">◈ SQZ ${tfs}</div>
     <div class="bb-bar"><div class="bb-fill" style="width:${sq.strength}%"></div></div>
-    <span class="sq-label">${sq.duration}c · ${sq.strength}%</span>
+    <span class="sq-label">${sq.duration}c · top ${sq.percentile??0}%</span>
   </div>`;
 }
 function findPivots(arr, win=3) {
@@ -783,11 +829,29 @@ function fmtPrice(p){
   if(p>=0.01) return '$'+p.toFixed(4);
   return '$'+p.toFixed(6);
 }
-function getBadge(result,tf){
+
+// ── TRADINGVIEW HELPERS ──
+// Maps internal TF keys to TradingView interval codes
+const TV_INTERVALS = { 'SIX_HOUR':'240', 'ONE_HOUR':'60', 'THIRTY_MINUTE':'30' };
+
+function tvUrl(symbol, tf) {
+  const interval = TV_INTERVALS[tf] || '60';
+  // Use BINANCE feed — best coverage for crypto on TradingView
+  const pair = symbol + 'USDT';
+  return `https://www.tradingview.com/chart/?symbol=BINANCE:${pair}&interval=${interval}`;
+}
+
+function getBadge(result, tf, symbol){
   if(!activeTFs[tf]) return '<span style="color:var(--muted);font-size:0.58rem">off</span>';
   if(!result) return '<div class="pattern-badge loading">...</div>';
-  if(result.signal==='bullish') return '<div class="pattern-badge bullish"><span class="dot g" style="margin-right:3px"></span>BULL</div>';
-  if(result.signal==='bearish') return '<div class="pattern-badge bearish"><span class="dot r" style="margin-right:3px"></span>BEAR</div>';
+  if(result.signal==='bullish'){
+    const url = symbol ? tvUrl(symbol, tf) : '#';
+    return `<a href="${url}" target="_blank" rel="noopener" style="text-decoration:none"><div class="pattern-badge bullish tv-link"><span class="dot g" style="margin-right:3px"></span>BULL ↗</div></a>`;
+  }
+  if(result.signal==='bearish'){
+    const url = symbol ? tvUrl(symbol, tf) : '#';
+    return `<a href="${url}" target="_blank" rel="noopener" style="text-decoration:none"><div class="pattern-badge bearish tv-link"><span class="dot r" style="margin-right:3px"></span>BEAR ↗</div></a>`;
+  }
   return '<div class="pattern-badge none">—</div>';
 }
 function getConfHTML(token){
@@ -811,14 +875,14 @@ function renderCards(data){
     const signalCells = tfs.map(tf => `
       <div class="signal-cell">
         <span class="signal-tf">${tfLabels[tf]}</span>
-        ${getBadge(t.patterns[tf], tf)}
+        ${getBadge(t.patterns[tf], tf, t.symbol)}
       </div>`).join('');
     const sqz = Object.entries(t.squeeze||{}).filter(([tf,s])=>s&&s.squeezing);
     const sqzHTML = sqz.length
       ? `<div style="display:flex;flex-direction:column;gap:2px">
            <div class="pattern-badge ${sqz[0][1].strength>=80?'squeeze-strong':'squeeze'}">◈ SQZ ${sqz.map(([tf])=>tfLabels[tf]).join('+')}</div>
            <div class="bb-bar"><div class="bb-fill" style="width:${sqz[0][1].strength}%"></div></div>
-           <span class="sq-label">${sqz[0][1].duration}c · ${sqz[0][1].strength}%</span>
+           <span class="sq-label">${sqz[0][1].duration}c · top ${sqz[0][1].percentile??0}%</span>
          </div>`
       : '<span style="color:var(--muted);font-size:0.65rem">no squeeze</span>';
     const sigs = Object.values(t.patterns).filter(p=>p&&p.signal!=='none');
@@ -827,7 +891,9 @@ function renderCards(data){
     return `<div class="token-card">
       <div class="token-card-top">
         <div class="token-card-name">
-          <span class="token-card-sym">${t.rank}. ${t.symbol}</span>
+          ${Object.values(t.patterns).some(p=>p&&p.signal!=='none')
+            ? `<a href="${tvUrl(t.symbol,'ONE_HOUR')}" target="_blank" rel="noopener" style="text-decoration:none"><span class="token-card-sym tv-sym">${t.rank}. ${t.symbol} ↗</span></a>`
+            : `<span class="token-card-sym">${t.rank}. ${t.symbol}</span>`}
           <span class="token-card-full">${t.name}</span>
         </div>
         <div class="token-card-price">
@@ -883,14 +949,22 @@ function renderTable(){
   body.innerHTML=data.map(t=>{
     const chg=t.change24h;
     const chgStr=chg!=null?`<span class="change ${chg>=0?'up':'down'}">${chg>=0?'+':''}${chg.toFixed(2)}%</span>`:'<span style="color:var(--muted)">—</span>';
+    const hasSignal = Object.values(t.patterns).some(p=>p&&p.signal!=='none');
+    const tvDefault = tvUrl(t.symbol, 'ONE_HOUR');
+    const symHTML = hasSignal
+      ? `<a href="${tvDefault}" target="_blank" rel="noopener" style="text-decoration:none"><span class="token-symbol tv-sym">${t.symbol} ↗</span></a>`
+      : `<span class="token-symbol">${t.symbol}</span>`;
     return `<div class="token-row">
       <div class="rank">${t.rank}</div>
-      <div class="token-info"><span class="token-symbol">${t.symbol}</span><span class="token-name">${t.name}</span></div>
+      <div class="token-info">
+        ${symHTML}
+        <span class="token-name">${t.name}</span>
+      </div>
       <div class="price">${fmtPrice(t.price)}</div>
       <div>${chgStr}</div>
-      <div>${getBadge(t.patterns['SIX_HOUR'],'SIX_HOUR')}</div>
-      <div>${getBadge(t.patterns['ONE_HOUR'],'ONE_HOUR')}</div>
-      <div>${getBadge(t.patterns['THIRTY_MINUTE'],'THIRTY_MINUTE')}</div>
+      <div>${getBadge(t.patterns['SIX_HOUR'],'SIX_HOUR',t.symbol)}</div>
+      <div>${getBadge(t.patterns['ONE_HOUR'],'ONE_HOUR',t.symbol)}</div>
+      <div>${getBadge(t.patterns['THIRTY_MINUTE'],'THIRTY_MINUTE',t.symbol)}</div>
       <div>${getSqueezeBadgeHTML(t)}</div>
       <div>${getConfHTML(t)}</div>
     </div>`;
