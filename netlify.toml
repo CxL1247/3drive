@@ -2,6 +2,11 @@
   functions = "netlify/functions"
   publish = "."
 
+[functions]
+  node_bundler = "zisi"
+
+[context.production.environment]
+  NODE_VERSION = "18"
 [[headers]]
   for = "/*"
   [headers.values]
