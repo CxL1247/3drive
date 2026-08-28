@@ -1,34 +1,47 @@
 # 3Drive Scanner
 
-A real-time crypto scanner that detects the **Three Drives** harmonic pattern across the top 100 tokens by market cap, confirmed by RSI divergence, and ranked by a composite confidence score.
+A real-time crypto scanner across the top 100 tokens by market cap — pattern detection, live rankings, and order book reads, all in one page.
 
-## What it does
+## Tabs
 
-- **Pattern detection** — identifies genuine Three Drives structures using Fibonacci-proportional price legs (not just "three higher highs," which would also catch head-and-shoulders-like shapes)
-- **RSI divergence confirmation** — a signal only fires when price and RSI disagree at each drive point (lower RSI highs on bearish setups, higher RSI lows on bullish setups)
-- **Multi-timeframe scanning** — 4H, 1H, and 30M, checked continuously via auto-refresh
-- **Confidence scoring** — each signal is scored from the base pattern quality, then adjusted for:
-  - Support/resistance confluence (clustered, multi-touch zones — not raw pivots)
-  - Fair value gap confluence (grade A/B only)
-  - Volume confirmation at the pattern's actual formation candle
-  - The token's own historical hit rate for that signal type
-- **Trend-context filtering** — flags (and excludes from alerts/tracking) lower-timeframe signals that fight the 4H trend
-- **Weekend liquidity flagging** — marks signals formed on weekends, excluded from alerts
-- **Hit rate tracking** — every signal is logged with its real outcome, broken out by category (standard / trend-conflict / weekend), so the filtering assumptions above can be checked against actual data rather than just trusted
+### Scanner
+Detects four setups across 4H/1H/30M, continuously via auto-refresh:
+- **Three Drives** — genuine harmonic structures using Fibonacci-proportional legs (not just "three higher highs"), confirmed by RSI divergence at each drive point
+- **Fair Value Gaps** — graded A/B, used as confluence for other signals
+- **Bollinger Band Squeeze** — volatility compression flagged as it happens
+- **Fixed Range Volume Profile / Range Deviation** — anchored at the exact swing pivot of a real impulsive move (not just the start of a search window), builds a real volume profile from that pivot to now, and derives VAH/POC/VAL. A catalyst move has to clear both a volatility-relative bar (vs. that token's own recent range) and a volume-confirmation bar before it counts — tuned against synthetic noise until false positives dropped under 1%. Every detected range gets a 0–100 quality score and A/B/C grade; anything scoring below 50 is filtered out entirely rather than shown.
+
+Each signal gets a composite confidence score (support/resistance confluence, FVG confluence, volume confirmation at the formation candle, the token's own historical hit rate), trend-context filtering (flags lower-timeframe signals fighting the 4H trend), and weekend liquidity flagging.
+
+### Gainers & Losers
+Top 25 gainers/losers across 15m/30m/1h/4h windows. Price ticks live via WebSocket; the comparison window is recalculated against real wall-clock time on every render (not frozen at scan time), so it stays accurate no matter how long the tab's been open. Each token's candle-series price is cross-checked against its independently-sourced ticker price — anything that disagrees by more than 3% (a likely wrong-instrument match from an ambiguous ticker) is dropped rather than shown.
+
+### RSI Ranking
+Every scanned token ranked by live RSI, 1H or 4H, sortable. Shown as a plain number with a mini position bar — no "overbought/oversold" labels. Includes market-wide summary stats (avg RSI, overbought/oversold counts, hottest token).
+
+### Order Book
+Real resting bid/ask depth per token — not leveraged positions, not predicted liquidation levels. Sums bid vs. ask notional within ±3% of price to derive an imbalance score, and surfaces the single largest resting order (the "wall") on each side, with its exact price and size. Two columns: strongest buy pressure vs. strongest sell pressure. Shows which exchange each row's data actually came from. Snapshot per scan cycle, not continuously streamed — full order book depth for ~100 tokens at once isn't practical to stream live.
+
+### Token Search
+Search any scanned token to open a floating popup combining Pattern, RSI, Range, and Order Book data for that one token in one place. Minimize to a summary pill, maximize to a larger panel, or close — price ticks live while open.
+
+## Trading Journal
+Log trades (entry/SL/TP/leverage, R-multiple, scale-outs) and open trades get a live-tracked floating widget showing real-time P&L against SL/TP, independent of the current scan universe. Auto-resolves against live candles when TP/SL is hit.
 
 ## Data sources
 
-Candle and ticker data is fetched from **KuCoin, OKX, Binance, and Bybit** in parallel — whichever responds first wins. In practice, Binance and Bybit block requests from cloud/serverless IP ranges (not a Nigeria-specific restriction — confirmed via direct testing), so **KuCoin is the primary effective source** for most deployments, with OKX as secondary.
+Candle, ticker, and order book data is fetched from **KuCoin, OKX, Binance, and Bybit** in parallel per request — whichever responds first wins. In practice, Binance and Bybit block requests from many cloud/serverless IP ranges (a documented, general restriction — not specific to any one region), so **KuCoin is often the primary effective source** on serverless deployments, with OKX as secondary. This is also why nothing in the app is hardcoded to a single exchange: if one gets blocked mid-scan, the others silently cover for it.
 
 ## Stack
 
 - Single-page vanilla JS/HTML frontend, no build step
-- Netlify Functions as a CORS proxy to the exchange APIs
-- Email alerts via a separate Netlify Function
-- All data (journal, hit-rate history, settings) stored in browser localStorage — no backend database
+- Netlify Functions (`netlify/functions/proxy.js`) as a CORS proxy + exchange-race layer to the exchange APIs
+- Email alerts via a separate Netlify Function (`netlify/functions/send-alert.js`)
+- All data (journal, hit-rate history, settings, dismissed widgets) stored in browser localStorage — no backend database
 
 ## Known limitations
 
 - No cross-device sync (localStorage only)
 - Alert endpoint is currently unauthenticated
-- Binance/Bybit candle data unavailable when self-hosted on most serverless platforms (IP-range blocking)
+- Binance/Bybit data unavailable when self-hosted on most serverless platforms (IP-range blocking) — the app is designed to degrade to the other exchanges automatically when this happens
+- Order Book and Fixed Range Volume Profile are both approximations built from OHLCV/depth-snapshot data, not tick-level or true liquidation feeds
