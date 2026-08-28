@@ -306,56 +306,125 @@ async function fetchTop100ByMarketCap(n) {
 }
 
 // ── LEGACY: ?url= passthrough for CoinGecko / calendar ──
-const ALLOWED = [
+// SECURITY: this list is matched by EXACT ORIGIN, never by string prefix.
+// A prefix check (url.startsWith(origin)) is bypassable — both
+//   https://api.coingecko.com.evil.com/...   (suffix trick)
+//   https://api.coingecko.com@evil.com/...   (userinfo trick)
+// pass a startsWith() test while resolving to an attacker-controlled host,
+// which turns this function into an SSRF proxy. Parse and compare origins.
+const ALLOWED_ORIGINS = new Set([
   'https://api.alternative.me',
   'https://api.coingecko.com',
   'https://nfs.faireconomy.media',
   'https://cdn-nfs.faireconomy.media',
-];
+]);
 
-const CORS = { 'Content-Type':'application/json', 'Access-Control-Allow-Origin':'*' };
+function passthroughAllowed(raw) {
+  let u;
+  try { u = new URL(raw); } catch { return false; }
+  if (u.protocol !== 'https:') return false;        // no http/file/gopher/etc.
+  if (u.username || u.password) return false;       // reject userinfo entirely
+  return ALLOWED_ORIGINS.has(u.origin);             // exact origin, not prefix
+}
+
+// ── INPUT VALIDATION — these values are interpolated into exchange URLs ──
+const SYMBOL_RE = /^[A-Z0-9]{1,15}$/;
+const validSymbol = (s) => {
+  const up = String(s ?? '').toUpperCase();
+  return SYMBOL_RE.test(up) ? up : null;
+};
+const validTf     = (tf) => (Object.prototype.hasOwnProperty.call(TF_MAP, tf) ? tf : null);
+const validMarket = (m)  => (m === 'perp' ? 'perp' : 'spot');
+
+const CORS = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': process.env.APP_ORIGIN || '*',
+  'Vary': 'Origin',
+};
+
+// ── SHORT-TTL RESPONSE CACHE (per warm container) ──
+// ~100 tokens x 3 timeframes x 4 exchanges per scan cycle, repeated for every open
+// tab, is what drives exchange rate-limit pressure and function-quota burn. A few
+// seconds of caching collapses duplicate work with no staleness that matters at
+// 30M/1H/4H resolution.
+const CACHE_TTL_MS = { candles: 20_000, orderbook: 5_000, tickers: 15_000, top100: 300_000 };
+const cache = new Map();
+
+function cacheGet(key) {
+  const hit = cache.get(key);
+  if (!hit) return null;
+  if (Date.now() > hit.expires) { cache.delete(key); return null; }
+  return hit.value;
+}
+
+function cacheSet(key, value, ttl) {
+  cache.set(key, { value, expires: Date.now() + ttl });
+  if (cache.size > 800) {
+    const now = Date.now();
+    for (const [k, v] of cache) if (now > v.expires) cache.delete(k);
+  }
+}
 
 exports.handler = async function(event) {
   const q = event.queryStringParameters || {};
 
   if (q.action === 'candles') {
-    const { symbol, tf, market } = q;
-    if (!symbol || !tf) return { statusCode:400, headers:CORS, body:JSON.stringify({error:'Missing symbol or tf'}) };
+    const symbol = validSymbol(q.symbol);
+    const tf     = validTf(q.tf);
+    const market = validMarket(q.market);
+    if (!symbol || !tf) return { statusCode:400, headers:CORS, body:JSON.stringify({error:'Invalid or missing symbol/tf'}) };
+    const key = `candles:${market}:${symbol}:${tf}`;
+    const cached = cacheGet(key);
+    if (cached) return { statusCode:200, headers:CORS, body:JSON.stringify(cached) };
     const data = market === 'perp'
-      ? await fetchPerpCandles(symbol.toUpperCase(), tf)
-      : await fetchCandles(symbol.toUpperCase(), tf);
+      ? await fetchPerpCandles(symbol, tf)
+      : await fetchCandles(symbol, tf);
     if (!data) return { statusCode:502, headers:CORS, body:JSON.stringify({error:'All candle sources failed'}) };
+    cacheSet(key, data, CACHE_TTL_MS.candles);
     return { statusCode:200, headers:CORS, body:JSON.stringify(data) };
   }
 
   if (q.action === 'orderbook') {
-    const { symbol, market } = q;
-    if (!symbol) return { statusCode:400, headers:CORS, body:JSON.stringify({error:'Missing symbol'}) };
+    const symbol = validSymbol(q.symbol);
+    const market = validMarket(q.market);
+    if (!symbol) return { statusCode:400, headers:CORS, body:JSON.stringify({error:'Invalid or missing symbol'}) };
+    const key = `orderbook:${market}:${symbol}`;
+    const cached = cacheGet(key);
+    if (cached) return { statusCode:200, headers:CORS, body:JSON.stringify(cached) };
     const data = market === 'perp'
-      ? await fetchPerpOrderbook(symbol.toUpperCase())
-      : await fetchOrderbook(symbol.toUpperCase());
+      ? await fetchPerpOrderbook(symbol)
+      : await fetchOrderbook(symbol);
     if (!data) return { statusCode:502, headers:CORS, body:JSON.stringify({error:'All orderbook sources failed'}) };
+    cacheSet(key, data, CACHE_TTL_MS.orderbook);
     return { statusCode:200, headers:CORS, body:JSON.stringify(data) };
   }
 
   if (q.action === 'tickers') {
     const n = Math.min(parseInt(q.n)||100, 200);
+    const key = `tickers:${n}`;
+    const cached = cacheGet(key);
+    if (cached) return { statusCode:200, headers:CORS, body:JSON.stringify(cached) };
     const data = await fetchTickers(n);
     if (!data.length) return { statusCode:502, headers:CORS, body:JSON.stringify({error:'All ticker sources failed'}) };
+    cacheSet(key, data, CACHE_TTL_MS.tickers);
     return { statusCode:200, headers:CORS, body:JSON.stringify(data) };
   }
 
   if (q.action === 'top100') {
     const n = Math.min(parseInt(q.n)||100, 150);
+    const key = `top100:${n}`;
+    const cached = cacheGet(key);
+    if (cached) return { statusCode:200, headers:CORS, body:JSON.stringify(cached) };
     const data = await fetchTop100ByMarketCap(n);
     if (data.error) return { statusCode:502, headers:CORS, body:JSON.stringify(data) };
+    cacheSet(key, data, CACHE_TTL_MS.top100);
     return { statusCode:200, headers:CORS, body:JSON.stringify(data) };
   }
 
-  // Legacy passthrough
+  // Legacy passthrough — exact-origin allowlist only (see passthroughAllowed)
   const url = q.url;
-  if (!url) return { statusCode:400, body:'Missing action or url' };
-  if (!ALLOWED.some(o => url.startsWith(o))) return { statusCode:403, body:'Not allowed' };
+  if (!url) return { statusCode:400, headers:CORS, body:JSON.stringify({error:'Missing action or url'}) };
+  if (!passthroughAllowed(url)) return { statusCode:403, headers:CORS, body:JSON.stringify({error:'Not allowed'}) };
   const r = await fetchUrl(url, 8000);
   return { statusCode:r.status||502, headers:CORS, body:r.body||'{}' };
 };
