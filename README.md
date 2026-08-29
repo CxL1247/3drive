@@ -35,6 +35,7 @@ Candle, ticker, and order book data is fetched from **KuCoin, OKX, Binance, and 
 ## Stack
 
 - Single-page vanilla JS/HTML frontend, no build step
+- Detection math in `src/detectors.js`, a dependency-free script shared by the page, the tests, and the signals endpoint
 - Netlify Functions (`netlify/functions/proxy.js`) as a CORS proxy + exchange-race layer to the exchange APIs
 - Email alerts via a separate Netlify Function (`netlify/functions/send-alert.js`)
 - All data (journal, hit-rate history, settings, dismissed widgets) stored in browser localStorage — no backend database
@@ -42,6 +43,51 @@ Candle, ticker, and order book data is fetched from **KuCoin, OKX, Binance, and 
 ## Known limitations
 
 - No cross-device sync (localStorage only)
-- Alert endpoint is currently unauthenticated
+- Alert endpoint sends only to a pre-approved recipient allowlist (`ALERT_ALLOWED_RECIPIENTS`), and refuses to send at all until that is configured
 - Binance/Bybit data unavailable when self-hosted on most serverless platforms (IP-range blocking) — the app is designed to degrade to the other exchanges automatically when this happens
 - Order Book and Fixed Range Volume Profile are both approximations built from OHLCV/depth-snapshot data, not tick-level or true liquidation feeds
+- The quality score and A/B grade are **self-assessments, not measured performance**. Hit-rate history lives in localStorage, so it is per-browser and unauditable, and no realized outcome has been scored against fees and slippage yet. The `/signals` endpoint below exists to close that gap
+
+## Detection library
+
+`src/detectors.js` holds the pure indicator and pattern math — RSI, EMA, Bollinger bandwidth,
+swing/pivot detection, 3-Drive, FVGs, S/R levels, the volume profile and the range detector.
+It touches no DOM, no network and no storage.
+
+The page loads it before its inline script and every export lands on the global object, so call
+sites read exactly as they always did. The same file is `require()`d by the tests and by the
+signals function, which means there is one copy of the math rather than three that can drift.
+
+## Signals endpoint
+
+`POST /.netlify/functions/signals` runs the detectors over a candle series you supply and returns
+what they found. It is stateless, stores nothing, and makes no exchange calls of its own.
+
+```
+POST /.netlify/functions/signals
+{ "symbol": "BTC", "tf": "ONE_HOUR", "candles": [{ "t":…, "o":…, "h":…, "l":…, "c":…, "v":… }, …] }
+```
+
+Send `{ "series": [ … ] }` instead to analyse up to 25 at once; one bad series is reported in place
+and does not fail the batch. Valid timeframes are `SIX_HOUR` (4H candles), `ONE_HOUR` and
+`THIRTY_MINUTE`, and a series needs at least 40 candles — the same floor the scanner uses.
+
+The caller supplies the candles on purpose. Binance and Bybit block many serverless IP ranges, so a
+scan-it-yourself endpoint would be both slow and partially blind, while a caller running elsewhere
+is not restricted.
+
+Every response carries `detectorVersion`, a hash of the detector code and its thresholds as loaded.
+Tune a constant and the hash changes, so recorded signals separate into clean cohorts instead of a
+silently mixed sample — which is what makes an honest hit rate possible later.
+
+Optional env: `SIGNALS_TOKEN` (required as `x-signals-token` when set) and `APP_ORIGIN` to narrow CORS.
+
+## Tests
+
+No framework and no install — plain Node:
+
+```
+node test/detectors.js    # detection math
+node test/signals.js      # signals endpoint
+node test/security.js     # proxy allowlist + alert hardening
+```
