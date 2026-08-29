@@ -2638,8 +2638,8 @@ input.ctrl::placeholder { color: var(--text-3); }
             <div class="guide-desc">A strong impulsive move ("way mover") is detected — required to clear both a volatility-relative bar (4x that token's own recent candle range) and a volume-confirmation bar (1.5x its own recent avg volume), so ordinary noise can't qualify. The volume profile is then built from the exact swing pivot through to now. VAH/VAL are the two tradeable lines — the tightest band containing 70% of volume around the POC. Requires 2+ full VAH-to-VAL swings.</div>
           </div>
           <div class="guide-item">
-            <div class="guide-badge-row"><div class="range-grade grade-A">A</div>&nbsp;<div class="range-grade grade-B">B</div>&nbsp;<div class="range-grade grade-C">C</div></div>
-            <div class="guide-desc">Every badge carries a grade (0-100 score under the hood, hover for the exact number). Weighted from catalyst strength, volume strength, how tightly volume is concentrated around POC, freshness, and swing count. Anything scoring below 50 is filtered out entirely — you're only ever shown setups worth looking at, not every technically-valid one. Sort the table by "Range quality, best first" to surface the strongest first.</div>
+            <div class="guide-badge-row"><div class="range-grade grade-A">A</div>&nbsp;<div class="range-grade grade-B">B</div></div>
+            <div class="guide-desc">Every badge carries a grade (0-100 score under the hood, hover for the exact number). Weighted from catalyst strength, volume strength, how tightly volume is concentrated around POC, freshness, and swing count. Only B-grade (65+) and A-grade (80+) setups are ever shown — anything weaker is filtered out entirely, not just labeled low. Sort the table by "Range quality, best first" to surface the strongest first.</div>
           </div>
           <div class="guide-item">
             <div class="guide-badge-row"><div class="range-badge dev-above">⬡ NEAR VAH</div>&nbsp;<div class="range-badge dev-below">⬡ NEAR VAL</div></div>
@@ -4137,7 +4137,7 @@ const CATALYST_MAX_CANDLES = 6;   // catalyst completes within 6 candles
 const CATALYST_BASELINE_LOOKBACK = 20;  // candles before the window used as this token's own "normal" baseline
 const CATALYST_ATR_MULT  = 4.0;   // move must be 4x the token's own recent avg candle range, not just a flat %
 const CATALYST_VOL_MULT  = 1.5;   // move must carry 1.5x the token's own recent avg volume — real conviction, not a thin wick
-const RANGE_MIN_QUALITY  = 50;    // 0-100 composite score floor — below this, don't surface it at all (too marginal to act on)
+const RANGE_MIN_QUALITY  = 65;    // 0-100 composite score floor — B-grade and up only. C (50-64) cleared the bar but was the noisiest tier in practice.
 const RANGE_MIN_CANDLES  = 12;    // need at least 12 candles of oscillation after the pivot
 const RANGE_MAX_CANDLES  = 60;    // stale after 60 candles
 const RANGE_MIN_WIDTH    = 0.03;  // structural box must be ≥3% wide
@@ -4321,7 +4321,7 @@ function detectRange(closes, highs, lows, volumes, opens, tfKey) {
   );
   if(qualityScore < RANGE_MIN_QUALITY) return null; // marginal setup — not worth surfacing
 
-  const grade = qualityScore >= 80 ? 'A' : qualityScore >= 65 ? 'B' : 'C';
+  const grade = qualityScore >= 80 ? 'A' : 'B'; // C used to exist (50-64) but the gate above now excludes it entirely
 
   // ── Step 6: Containment against the structural box (not VAH/VAL — that's expected to be pierced) ──
   let bodyBreaks = 0;
@@ -5124,7 +5124,7 @@ function getHRStats(signals) {
   const losses   = resolved.filter(s => s.outcome === 'loss').length;
   const neutral  = resolved.filter(s => s.outcome === 'neutral').length;
   const total    = resolved.length;
-  const rate     = total > 0 ? Math.round(wins / (wins+losses) * 100) : null;
+  const rate     = (wins+losses) > 0 ? Math.round(wins / (wins+losses) * 100) : null;
 
   // Expectancy — average % return per signal, in the *direction the signal bet on*
   // (a bearish win means price fell, so we flip sign to express it as a positive move)
@@ -5257,7 +5257,7 @@ function renderHitRate() {
     : 'no signals logged yet — run a scan';
 
   // Summary stat cards
-  const rateColor = stats.rate >= 60 ? 'var(--green)' : stats.rate >= 50 ? 'var(--amber)' : 'var(--red)';
+  const rateColor = stats.rate == null ? 'var(--text-3)' : stats.rate >= 60 ? 'var(--green)' : stats.rate >= 50 ? 'var(--amber)' : 'var(--red)';
   const expColor = stats.expectancy == null ? 'var(--text-3)' : stats.expectancy > 0 ? 'var(--green)' : stats.expectancy < 0 ? 'var(--red)' : 'var(--text-3)';
   const expVal = stats.expectancy == null ? '—' : (stats.expectancy >= 0 ? '+' : '') + stats.expectancy.toFixed(2) + '%';
   document.getElementById('hrStats').innerHTML = [
@@ -5285,7 +5285,7 @@ function renderHitRate() {
         <div style="font-family:var(--font-ui);font-size:0.58rem;color:var(--red);text-align:center;font-weight:600">L</div>
         <div style="font-family:var(--font-ui);font-size:0.58rem;color:var(--text-3);text-align:center;font-weight:600">TOT</div>
         ${breakdown.map(b => {
-          const rc = b.rate >= 60 ? 'var(--green)' : b.rate >= 50 ? 'var(--amber)' : 'var(--red)';
+          const rc = b.rate == null ? 'var(--text-3)' : b.rate >= 60 ? 'var(--green)' : b.rate >= 50 ? 'var(--amber)' : 'var(--red)';
           const ec = b.expectancy == null ? 'var(--text-3)' : b.expectancy > 0 ? 'var(--green)' : b.expectancy < 0 ? 'var(--red)' : 'var(--text-3)';
           const expStr = b.expectancy == null ? '—' : (b.expectancy >= 0 ? '+' : '') + b.expectancy.toFixed(1) + '%';
           const bar = b.rate !== null ? `<div style="height:3px;background:var(--border);border-radius:2px;margin-top:4px"><div style="height:3px;width:${b.rate}%;background:${rc};border-radius:2px"></div></div>` : '';
@@ -7654,7 +7654,10 @@ async function alertsAfterScan(results){
       if(conf < threshold) continue;
       if(p.signal==='bullish' && !onBull) continue;
       if(p.signal==='bearish' && !onBear) continue;
-      if(p.trendConflict) continue; // fights the 4H trend — don't alert on it
+      // Trend-conflict signals used to be silently dropped. Now included, but explicitly
+      // flagged in the alert itself — the recipient decides, rather than the scanner deciding
+      // silently. The other three filters stay hard excludes: possible artificial volume, thin
+      // liquidity, and weekend liquidity are data-quality concerns, not a trade-preference call.
       if(p.volumeMismatch) continue; // possible artificial volume — don't alert on it
       if(p.lowVolume) continue;      // thin liquidity, weaker evidence — don't alert on it
       if(p.isWeekend) continue;     // thinner weekend liquidity, don't trade these anyway
@@ -7663,7 +7666,8 @@ async function alertsAfterScan(results){
       matching.push({ token:t.symbol, signal:p.signal, type:'3drive',
         tf: tf==='SIX_HOUR'?'4H':tf==='ONE_HOUR'?'1H':'30M',
         price: t.price ? '$'+Number(t.price).toLocaleString(undefined,{maximumFractionDigits:4}) : '—',
-        confidence: conf, srLevel: p.srLevel });
+        confidence: conf, srLevel: p.srLevel,
+        trendConflict: !!p.trendConflict, trend4h: p.trend4h || null });
     }
     // BB Squeeze — only alert when squeezing at S/R
     if(onSqueeze){
@@ -7713,25 +7717,25 @@ async function alertsAfterScan(results){
       </div>
     </div>
 
-    <div id="weeklyReportBox" style="display:none;margin:0 16px 12px;padding:14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-lg);white-space:pre-wrap;font-family:var(--font-mono);font-size:0.68rem;color:var(--text-2);line-height:1.6"></div>
+    <div id="weeklyReportBox" style="display:none;flex-shrink:0;margin:0 16px 12px;padding:14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-lg);white-space:pre-wrap;font-family:var(--font-mono);font-size:0.68rem;color:var(--text-2);line-height:1.6"></div>
 
     <!-- Category filter — standard vs trend-conflict vs weekend, tracked separately so the
          trend/weekend filtering assumptions can be checked against real outcomes rather than
          just asserted -->
-    <div id="hrCatFilters" style="display:flex;gap:6px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap"></div>
+    <div id="hrCatFilters" style="flex-shrink:0;display:flex;gap:6px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap"></div>
 
     <!-- Confidence distribution vs current alert threshold — answers "is my threshold too
          strict/loose" with real numbers instead of eyeballing the console -->
-    <div id="hrConfDist" style="padding:0 16px 12px"></div>
+    <div id="hrConfDist" style="flex-shrink:0;padding:0 16px 12px"></div>
 
     <!-- Summary stats -->
-    <div id="hrStats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:16px;border-bottom:1px solid var(--border)"></div>
+    <div id="hrStats" style="flex-shrink:0;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:16px;border-bottom:1px solid var(--border)"></div>
 
     <!-- Breakdown by type -->
-    <div id="hrBreakdown" style="padding:12px 16px;border-bottom:1px solid var(--border)"></div>
+    <div id="hrBreakdown" style="flex-shrink:0;padding:12px 16px;border-bottom:1px solid var(--border)"></div>
 
     <!-- Signal log -->
-    <div style="padding:12px 16px 0;display:flex;align-items:center;justify-content:space-between">
+    <div style="flex-shrink:0;padding:12px 16px 0;display:flex;align-items:center;justify-content:space-between">
       <div style="font-family:var(--font-ui);font-size:0.62rem;font-weight:600;color:var(--text-3);letter-spacing:1px;text-transform:uppercase">Signal Log</div>
       <div style="display:flex;gap:6px">
         <button class="filter-btn outcome-filter-btn active" onclick="hrFilter('all',this)">All</button>
@@ -7740,7 +7744,7 @@ async function alertsAfterScan(results){
         <button class="filter-btn outcome-filter-btn" onclick="hrFilter('pending',this)">Pending</button>
       </div>
     </div>
-    <div id="hrLog" style="overflow-y:auto;max-height:340px;padding:0 16px 16px"></div>
+    <div id="hrLog" style="flex:1;min-height:0;overflow-y:auto;padding:0 16px 16px"></div>
   </div>
 </div>
 

@@ -117,9 +117,12 @@ exports.handler = async function (event) {
   // arrive from an unauthenticated caller and must never reach the HTML unescaped.
   const rows = alerts.map(a => {
     const conf = num(a.confidence);
+    const trendNote = a.trendConflict
+      ? `<div style="margin-top:4px"><span style="font-family:monospace;font-size:10px;font-weight:700;color:#f0a800;background:rgba(240,168,0,0.1);padding:2px 6px;border-radius:4px">⚠ AGAINST 4H TREND${a.trend4h ? ` (4H is ${esc(String(a.trend4h).toUpperCase())})` : ''}</span></div>`
+      : '';
     return `<tr style="border-bottom:1px solid #1a2840">
     <td style="padding:12px 16px"><div style="font-family:monospace;font-size:16px;font-weight:700;color:#d4e2f0">${esc(a.token)}</div><div style="font-family:monospace;font-size:11px;color:#3d5570">${esc(a.price)}</div></td>
-    <td style="padding:12px 16px"><span style="font-family:monospace;font-size:13px;font-weight:700;color:${signalColor(a)}">${esc(signalLabel(a))}</span><div style="font-family:monospace;font-size:11px;color:#3d5570">${esc(a.tf)}</div></td>
+    <td style="padding:12px 16px"><span style="font-family:monospace;font-size:13px;font-weight:700;color:${signalColor(a)}">${esc(signalLabel(a))}</span><div style="font-family:monospace;font-size:11px;color:#3d5570">${esc(a.tf)}</div>${trendNote}</td>
     <td style="padding:12px 16px;text-align:center"><span style="font-family:monospace;font-size:14px;font-weight:700;color:${conf >= 80 ? '#00c9a0' : conf >= 70 ? '#f0a800' : '#8fa8c0'}">${conf}%</span></td>
     <td style="padding:12px 16px">${a.srLevel ? `<span style="font-family:monospace;font-size:12px;font-weight:700;color:#f06030;background:rgba(240,96,48,0.1);padding:2px 8px;border-radius:4px">◎ ${esc(String(a.srLevel).toUpperCase())}</span>` : '<span style="color:#3d5570">—</span>'}</td>
     <td style="padding:12px 16px"><a href="${tvUrl(a.token, a.tf)}" style="font-family:monospace;font-size:12px;color:#00c8f0;text-decoration:none;background:rgba(0,200,240,0.08);padding:4px 10px;border-radius:4px;border:1px solid rgba(0,200,240,0.25)">chart ↗</a></td>
