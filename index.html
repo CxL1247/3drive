@@ -693,6 +693,9 @@ input.ctrl::placeholder { color: var(--text-3); }
 .ob-wall { font-size: 0.66rem; color: var(--text-2); }
 .ob-wall-price { font-weight: 700; color: var(--text); }
 .ob-wall-size  { color: var(--text-3); font-size: 0.6rem; }
+.ob-confirm { font-size: 0.62rem; font-weight: 700; cursor: help; }
+.ob-confirm-yes { color: var(--green); }
+.ob-confirm-no  { color: var(--red); }
 @media (max-width: 640px) {
   .ob-table-header { grid-template-columns: 24px 1.1fr 0.8fr 1fr; padding: var(--sp-2) var(--sp-3); }
   .ob-row { grid-template-columns: 24px 1.1fr 0.8fr 1fr; padding: var(--sp-2) var(--sp-3); }
@@ -6126,7 +6129,22 @@ function renderRSIRanking(){
 // that band. Snapshot per scan cycle — order books move too fast to stream
 // live for ~100 tokens at once, so this refreshes alongside RSI Ranking's
 // existing per-scan pattern rather than ticking continuously like G&L.
+//
+// Two known limitations, both addressed below:
+//  1. Raw dollar wall sizes aren't comparable across tokens — $50K is nothing
+//     on BTC, dominant on a micro-cap. Every wall/book figure is normalized
+//     against that token's own 24h volume so the numbers mean the same thing
+//     wherever you look.
+//  2. A single snapshot can't tell a genuine resting order from a spoofed one
+//     that gets pulled seconds later. The top candidates on each side get a
+//     delayed recheck — if the wall isn't still there afterward, it's marked
+//     unconfirmed rather than presented with the same confidence as a real one.
 // ══════════════════════════════════════════════════════════
+
+const OB_CONFIRM_CANDIDATES = 15;   // per side — keep the recheck pass fast
+const OB_CONFIRM_DELAY_MS   = 3500; // wait before rechecking, to catch pulled/spoofed walls
+const OB_CONFIRM_TOLERANCE  = 0.01; // wall must still be within 1% of its original price
+const OB_CONFIRM_MIN_RETAIN = 0.5;  // and retain at least 50% of its original size
 
 async function scanOrderbooks(tokens){
   if(obScanning) return;
@@ -6161,15 +6179,22 @@ async function scanOrderbooks(tokens){
         }
 
         if(bidNotional + askNotional > 0){
+          const vol24h = token.volume || 0;
           out.push({
             symbol: token.symbol,
             name: token.name || token.symbol,
             price,
             source: data.source, // which exchange actually won the race for this token
-            imbalance: (bidNotional - askNotional) / (bidNotional + askNotional), // -1 (all ask) .. +1 (all bid)
+            imbalance: (bidNotional - askNotional) / (bidNotional + askNotional), // -1 (all ask) .. +1 (all bid) — already scale-invariant, no fix needed here
             bidNotional, askNotional,
             bidWallPrice, bidWallNotional,
             askWallPrice, askWallNotional,
+            vol24h,
+            // Normalized against this token's own 24h volume, so a wall reads the
+            // same way regardless of whether it's BTC or a micro-cap.
+            bidWallVolPct: vol24h > 0 ? bidWallNotional / vol24h : null,
+            askWallVolPct: vol24h > 0 ? askWallNotional / vol24h : null,
+            wallConfirmed: null, // null = not yet rechecked, true/false once confirmWalls() runs
           });
         }
       }
@@ -6193,11 +6218,57 @@ async function scanOrderbooks(tokens){
   obScanning = false;
   if(currentView === 'orderbook') renderOrderbook();
   if(tdpSymbol) renderTokenDetailBody(tdpSymbol); // popup showing this token — refresh Order Book section
+
+  confirmWalls(); // fire-and-forget — upgrades top candidates in place once the recheck lands
 }
 
-function obWallHtml(price, notional, side){
+// Rechecks the top-ranked wall on each side after a short delay. A wall that's
+// still there — same price, most of its size — is genuine resting interest.
+// One that's gone or gutted was likely spoofed (placed to look like support/
+// resistance, then pulled before it ever had to fill). Only the leaderboard's
+// actual candidates get rechecked, not all ~100 tokens, so this stays cheap.
+async function confirmWalls(){
+  const buyCandidates  = [...obRaw].sort((a,b)=>b.imbalance-a.imbalance).slice(0,OB_CONFIRM_CANDIDATES)
+    .filter(t=>t.bidWallPrice!=null).map(t=>({t, side:'bid'}));
+  const sellCandidates = [...obRaw].sort((a,b)=>a.imbalance-b.imbalance).slice(0,OB_CONFIRM_CANDIDATES)
+    .filter(t=>t.askWallPrice!=null).map(t=>({t, side:'ask'}));
+  const candidates = [...buyCandidates, ...sellCandidates];
+  if(!candidates.length) return;
+
+  await new Promise(res => setTimeout(res, OB_CONFIRM_DELAY_MS));
+
+  async function recheck({t, side}){
+    try {
+      const data = await fetchOrderbook(t.symbol);
+      if(!data){ t.wallConfirmed = false; return; }
+      const levels = side === 'bid' ? data.bids : data.asks;
+      const origPrice = side === 'bid' ? t.bidWallPrice : t.askWallPrice;
+      const origNotional = side === 'bid' ? t.bidWallNotional : t.askWallNotional;
+      let bestMatch = 0;
+      for(const [p,size] of levels){
+        if(Math.abs(p-origPrice)/origPrice <= OB_CONFIRM_TOLERANCE){
+          bestMatch = Math.max(bestMatch, p*size);
+        }
+      }
+      t.wallConfirmed = bestMatch >= origNotional * OB_CONFIRM_MIN_RETAIN;
+    } catch(e){ t.wallConfirmed = false; }
+  }
+
+  const BATCH = 6;
+  for(let i=0;i<candidates.length;i+=BATCH){
+    await Promise.all(candidates.slice(i,i+BATCH).map(recheck));
+  }
+  if(currentView === 'orderbook') renderOrderbook();
+  if(tdpSymbol) renderTokenDetailBody(tdpSymbol);
+}
+
+function obWallHtml(price, notional, volPct, side, confirmed){
   if(price == null) return `<div class="ob-wall"><span class="ob-wall-size">no wall in band</span></div>`;
-  return `<div class="ob-wall"><span class="ob-wall-price">${fmtPrice(price)}</span><br><span class="ob-wall-size">${fmtVolShort(notional)} ${side}</span></div>`;
+  const pctLabel = volPct != null ? ` · ${(volPct*100).toFixed(1)}% of 24h vol` : '';
+  let badge = '';
+  if(confirmed === true)  badge = ' <span class="ob-confirm ob-confirm-yes" title="Rechecked ~3.5s later — still resting at size">✓</span>';
+  if(confirmed === false) badge = ' <span class="ob-confirm ob-confirm-no" title="Rechecked ~3.5s later — gone or shrank significantly, likely spoofed/pulled or already filled">⚠</span>';
+  return `<div class="ob-wall"><span class="ob-wall-price">${fmtPrice(price)}</span>${badge}<br><span class="ob-wall-size">${fmtVolShort(notional)} ${side}${pctLabel}</span></div>`;
 }
 
 function obSourceLabel(source){
@@ -6212,8 +6283,8 @@ function obSourceLabel(source){
 function obRowHtml(rank, t, sideKey){
   const pos = t.imbalance >= 0;
   const wallHtml = sideKey === 'buy'
-    ? obWallHtml(t.bidWallPrice, t.bidWallNotional, 'resting bid')
-    : obWallHtml(t.askWallPrice, t.askWallNotional, 'resting ask');
+    ? obWallHtml(t.bidWallPrice, t.bidWallNotional, t.bidWallVolPct, 'resting bid', t.wallConfirmed)
+    : obWallHtml(t.askWallPrice, t.askWallNotional, t.askWallVolPct, 'resting ask', t.wallConfirmed);
   return `<div class="ob-row" onclick="window.open(tvUrl('${t.symbol}','ONE_HOUR'),'_blank')" title="Open ${t.symbol} on TradingView">
     <div class="ob-rank">${rank}</div>
     <div class="ob-sym"><span class="ob-sym-main">${t.symbol}</span><span class="ob-sym-sub">${fmtPrice(t.price)} <span class="ob-source">${obSourceLabel(t.source)}</span></span></div>
@@ -6390,10 +6461,16 @@ function tdpOrderbookSectionHtml(symbol){
   const ob = obRaw.find(o => o.symbol === symbol);
   if(!ob) return '<div class="tdp-empty-mini">Not available — visit Order Book to populate</div>';
   const pos = ob.imbalance >= 0;
+  const wallVal = (price, volPct, confirmed) => {
+    if(price == null) return '—';
+    const pct = volPct != null ? ` (${(volPct*100).toFixed(1)}% of vol)` : '';
+    const mark = confirmed === true ? ' ✓' : confirmed === false ? ' ⚠' : '';
+    return `${fmtPrice(price)}${pct}${mark}`;
+  };
   return `
     <div class="tdp-row"><span class="tdp-row-label">Imbalance</span><span class="tdp-row-val ${pos?'pos':'neg'}">${pos?'+':''}${(ob.imbalance*100).toFixed(0)}%</span></div>
-    <div class="tdp-row"><span class="tdp-row-label">Bid wall</span><span class="tdp-row-val">${ob.bidWallPrice ? fmtPrice(ob.bidWallPrice) : '—'}</span></div>
-    <div class="tdp-row"><span class="tdp-row-label">Ask wall</span><span class="tdp-row-val">${ob.askWallPrice ? fmtPrice(ob.askWallPrice) : '—'}</span></div>
+    <div class="tdp-row"><span class="tdp-row-label">Bid wall</span><span class="tdp-row-val ${ob.wallConfirmed===false?'neg':ob.wallConfirmed===true?'pos':''}">${wallVal(ob.bidWallPrice, ob.bidWallVolPct, ob.wallConfirmed)}</span></div>
+    <div class="tdp-row"><span class="tdp-row-label">Ask wall</span><span class="tdp-row-val ${ob.wallConfirmed===false?'neg':ob.wallConfirmed===true?'pos':''}">${wallVal(ob.askWallPrice, ob.askWallVolPct, ob.wallConfirmed)}</span></div>
     <div class="tdp-row"><span class="tdp-row-label">Source</span><span class="tdp-row-val">${obSourceLabel(ob.source)}</span></div>`;
 }
 
