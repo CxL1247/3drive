@@ -701,6 +701,109 @@ input.ctrl::placeholder { color: var(--text-3); }
   .ob-row { grid-template-columns: 24px 1.1fr 0.8fr 1fr; padding: var(--sp-2) var(--sp-3); }
 }
 
+/* ═══════════════════════════════════════
+   CONFLUENCE
+═══════════════════════════════════════ */
+.conf-section { margin-bottom: var(--sp-8); }
+.conf-section-title {
+  display: flex; align-items: center; gap: var(--sp-2);
+  font-family: var(--font-ui); font-size: 0.9rem; font-weight: 700;
+  color: var(--text); margin-bottom: 4px;
+}
+.conf-section-icon { color: var(--blue); font-size: 0.8rem; }
+.conf-section-sub {
+  font-family: var(--font-ui); font-size: 0.66rem; color: var(--text-3);
+  line-height: 1.6; max-width: 780px; margin-bottom: var(--sp-4);
+}
+.conf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--sp-4);
+}
+
+.conf-card {
+  position: relative;
+  background: linear-gradient(160deg, var(--bg2) 0%, var(--bg3) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: var(--sp-4);
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform var(--t-fast) var(--ease-out), box-shadow var(--t-fast);
+  animation: fw-in 0.4s var(--ease-spring);
+}
+.conf-card:hover { transform: translateY(-2px); }
+.conf-card.conf-bullish { box-shadow: var(--shadow-lg), var(--glow-green); }
+.conf-card.conf-bearish { box-shadow: var(--shadow-lg), var(--glow-red); }
+.conf-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+}
+.conf-card.conf-bullish::before { background: linear-gradient(90deg, var(--green), transparent); }
+.conf-card.conf-bearish::before { background: linear-gradient(90deg, var(--red), transparent); }
+
+.conf-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: var(--sp-3); }
+.conf-card-sym { font-family: var(--font-mono); font-weight: 700; font-size: 1rem; color: var(--text); }
+.conf-card-price { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-3); margin-top: 2px; }
+.conf-dir-badge {
+  font-family: var(--font-ui); font-size: 0.6rem; font-weight: 700; letter-spacing: 0.5px;
+  padding: 3px 8px; border-radius: var(--r-sm);
+}
+.conf-card.conf-bullish .conf-dir-badge { color: var(--green); background: var(--green-dim); }
+.conf-card.conf-bearish .conf-dir-badge { color: var(--red); background: var(--red-dim); }
+
+.conf-score-row { display: flex; align-items: baseline; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+.conf-score { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 800; }
+.conf-card.conf-bullish .conf-score { color: var(--green); }
+.conf-card.conf-bearish .conf-score { color: var(--red); }
+.conf-score-max { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-3); }
+.conf-grade { font-family: var(--font-ui); font-size: 0.62rem; font-weight: 800; padding: 2px 7px; border-radius: var(--r-sm); margin-left: auto; }
+
+.conf-bar-track { height: 5px; border-radius: 3px; background: var(--bg3); overflow: hidden; margin-bottom: var(--sp-4); }
+.conf-bar-fill { height: 100%; border-radius: 3px; transition: width var(--t-normal) var(--ease-out); }
+.conf-card.conf-bullish .conf-bar-fill { background: linear-gradient(90deg, var(--green), #4ade80); }
+.conf-card.conf-bearish .conf-bar-fill { background: linear-gradient(90deg, var(--red), #f87171); }
+
+.conf-pillars { display: flex; flex-direction: column; gap: 7px; }
+.conf-pillar { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--r-md); background: var(--bg3); opacity: 0.35; }
+.conf-pillar.conf-pillar-active { opacity: 1; background: rgba(255,255,255,0.03); }
+.conf-pillar-icon {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; background: var(--bg2); color: var(--text-3);
+}
+.conf-pillar.conf-pillar-active .conf-pillar-icon { color: var(--bg1); }
+.conf-card.conf-bullish .conf-pillar.conf-pillar-active .conf-pillar-icon { background: var(--green); box-shadow: 0 0 8px rgba(0,229,160,0.5); }
+.conf-card.conf-bearish .conf-pillar.conf-pillar-active .conf-pillar-icon { background: var(--red); box-shadow: 0 0 8px rgba(255,61,104,0.5); }
+.conf-pillar-label { font-family: var(--font-ui); font-size: 0.62rem; font-weight: 600; color: var(--text-2); }
+.conf-pillar-detail { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-3); margin-left: auto; }
+
+.conf-bonus-row {
+  margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px dashed var(--border2);
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-ui); font-size: 0.62rem; color: var(--amber);
+}
+
+/* Three Drives cards — simpler, same visual family */
+.conf-3d-card {
+  background: linear-gradient(160deg, var(--bg2) 0%, var(--bg3) 100%);
+  border: 1px solid var(--border); border-radius: var(--r-xl);
+  padding: var(--sp-4); cursor: pointer; transition: transform var(--t-fast);
+}
+.conf-3d-card:hover { transform: translateY(-2px); }
+.conf-3d-card.conf-bullish { box-shadow: var(--shadow-lg), var(--glow-green); }
+.conf-3d-card.conf-bearish { box-shadow: var(--shadow-lg), var(--glow-red); }
+.conf-3d-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-2); }
+.conf-3d-sym { font-family: var(--font-mono); font-weight: 700; font-size: 0.95rem; color: var(--text); }
+.conf-3d-conf { font-family: var(--font-mono); font-size: 1.3rem; font-weight: 800; }
+.conf-3d-card.conf-bullish .conf-3d-conf { color: var(--green); }
+.conf-3d-card.conf-bearish .conf-3d-conf { color: var(--red); }
+.conf-3d-meta { display: flex; gap: 6px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-3); }
+.conf-3d-tag { padding: 2px 6px; border-radius: 3px; background: var(--bg3); }
+
+@media (max-width: 640px) {
+  .conf-grid { grid-template-columns: 1fr; }
+}
+
 .btn {
   background: transparent;
   border: 1px solid var(--border);
@@ -2237,6 +2340,7 @@ input.ctrl::placeholder { color: var(--text-3); }
   <button class="nav-tab" id="viewTabGL" onclick="switchView('gl')" aria-pressed="false">Gainers &amp; Losers</button>
   <button class="nav-tab" id="viewTabRSI" onclick="switchView('rsi')" aria-pressed="false">RSI Ranking</button>
   <button class="nav-tab" id="viewTabOB" onclick="switchView('orderbook')" aria-pressed="false">Order Book</button>
+  <button class="nav-tab" id="viewTabConfluence" onclick="switchView('confluence')" aria-pressed="false">Confluence</button>
 </div>
 
 <!-- LIVE TICKER STRIP -->
@@ -2535,6 +2639,38 @@ input.ctrl::placeholder { color: var(--text-3); }
       </div>
     </div>
   </div>
+</div>
+
+<!-- CONFLUENCE VIEW -->
+<div class="main" id="confluenceView" style="display:none;animation:fade-in 0.4s var(--ease-out)">
+
+  <div class="controls-row">
+    <span class="ctrl-label">confluence:</span>
+    <span class="ob-band-note">2 of 3 (RSI · Range · Order Book) required, S/R is a bonus</span>
+    <button class="btn primary" id="confScanBtn" onclick="startScan()">▶ SCAN NOW</button>
+    <span class="gl-updated" id="confUpdated" aria-live="polite"></span>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-bar"><div class="progress-fill" id="confProgressFill" style="width:0%"></div></div>
+    <div class="progress-label" id="confProgressLabel">idle</div>
+  </div>
+
+  <div class="conf-section">
+    <div class="conf-section-title"><span class="conf-section-icon">◈</span> Three Drives</div>
+    <div class="conf-section-sub">Classic harmonic pattern signals — unrelated to the confluence engine below, shown here so every high-conviction setup lives in one place.</div>
+    <div class="conf-grid" id="conf3DriveGrid">
+      <div class="gl-empty">Press <strong>SCAN NOW</strong> — Three Drives signals will appear here.</div>
+    </div>
+  </div>
+
+  <div class="conf-section">
+    <div class="conf-section-title"><span class="conf-section-icon">⬢</span> Confluence Signals</div>
+    <div class="conf-section-sub">Built from RSI + Range (FRVP) + Order Book — fires independently of whether a chart pattern exists. At least 2 of the 3 core pillars must be concrete in the same direction; Support/Resistance adds bonus conviction but is never one of the two.</div>
+    <div class="conf-grid" id="confSignalGrid">
+      <div class="gl-empty">Press <strong>SCAN NOW</strong> — confluence signals need RSI, Range, and Order Book data from the same scan cycle.</div>
+    </div>
+  </div>
 
 </div>
 
@@ -2748,6 +2884,15 @@ const RSI_PERIOD = 14;
 const OB_BAND_PCT = 0.03;              // how far from current price counts as "the book" for imbalance — ±3%
 let obRaw = [];                        // [{symbol,name,price,volume,bidNotional,askNotional,imbalance,bidWall,askWall}]
 let obScanning = false;
+
+// ── CONFLUENCE state ──
+// RSI/Range/Order Book combined into a standalone signal — no dependency on
+// 3-Drive/FVG/Squeeze firing at all. Recomputed at render time from whatever
+// of the three source scans have completed, so it progressively fills in
+// rather than needing to wait for all three before showing anything.
+const CONF_RSI_EXTREME  = 25;   // "deeply" oversold/overbought — stricter than the 30/70 zone used elsewhere
+const CONF_OB_IMBALANCE = 0.50; // 50%+ imbalance = real, not marginal, pressure
+const CONF_SR_TOLERANCE = 0.015;// within 1.5% of a support/resistance zone counts as "at" it
 const BB_PERIOD  = 20;
 const BB_STDDEV  = 2;
 
@@ -5663,12 +5808,14 @@ async function startScan(){
   const glBtn=document.getElementById('glScanBtn');
   const rsiBtn=document.getElementById('rsiScanBtn');
   const obBtn=document.getElementById('obScanBtn');
+  const confBtn=document.getElementById('confScanBtn');
   btn.textContent='⏳ SCANNING...';
   btn.className='btn scanning';
   btn.disabled=true;
   if(glBtn){ glBtn.textContent='⏳ SCANNING...'; glBtn.className='btn scanning'; glBtn.disabled=true; }
   if(rsiBtn){ rsiBtn.textContent='⏳ SCANNING...'; rsiBtn.className='btn scanning'; rsiBtn.disabled=true; }
   if(obBtn){ obBtn.textContent='⏳ SCANNING...'; obBtn.className='btn scanning'; obBtn.disabled=true; }
+  if(confBtn){ confBtn.textContent='⏳ SCANNING...'; confBtn.className='btn scanning'; confBtn.disabled=true; }
   document.getElementById('logPanel').innerHTML='';
   document.getElementById('progressFill').style.width='0%';
   lastScanStart = Date.now();
@@ -5686,6 +5833,7 @@ async function startScan(){
     if(glBtn){ glBtn.textContent='▶ SCAN NOW'; glBtn.className='btn primary'; glBtn.disabled=false; }
     if(rsiBtn){ rsiBtn.textContent='▶ SCAN NOW'; rsiBtn.className='btn primary'; rsiBtn.disabled=false; }
     if(obBtn){ obBtn.textContent='▶ SCAN NOW'; obBtn.className='btn primary'; obBtn.disabled=false; }
+    if(confBtn){ confBtn.textContent='▶ SCAN NOW'; confBtn.className='btn primary'; confBtn.disabled=false; }
     return;
   }
 
@@ -5758,9 +5906,11 @@ async function startScan(){
   if(glBtn){ glBtn.textContent='▶ SCAN NOW'; glBtn.className='btn primary'; glBtn.disabled=false; }
   if(rsiBtn){ rsiBtn.textContent='▶ SCAN NOW'; rsiBtn.className='btn primary'; rsiBtn.disabled=false; }
   if(obBtn){ obBtn.textContent='▶ SCAN NOW'; obBtn.className='btn primary'; obBtn.disabled=false; }
+  if(confBtn){ confBtn.textContent='▶ SCAN NOW'; confBtn.className='btn primary'; confBtn.disabled=false; }
   document.getElementById('progressFill').style.width='100%';
   scanning=false;
   if(tdpSymbol) renderTokenDetailBody(tdpSymbol); // popup showing this token — refresh Pattern/Range with fresh data
+  if(currentView === 'confluence') renderConfluence(); // 3-Drive + Range ready; RSI/OB fill in as their own scans finish
   startLivePrices();
   buildTickerStrip();
   alertsAfterScan(tokenData);
@@ -5786,11 +5936,13 @@ function switchView(view){
   const glEl = document.getElementById('glView');
   const rsiEl = document.getElementById('rsiView');
   const obEl = document.getElementById('orderbookView');
+  const confEl = document.getElementById('confluenceView');
   const footerEl = document.querySelector('.guide-wrap');
   scannerEl.style.display = view==='scanner' ? '' : 'none';
   glEl.style.display = view==='gl' ? '' : 'none';
   rsiEl.style.display = view==='rsi' ? '' : 'none';
   obEl.style.display = view==='orderbook' ? '' : 'none';
+  confEl.style.display = view==='confluence' ? '' : 'none';
   if(footerEl) footerEl.style.display = view==='scanner' ? '' : 'none';
   document.getElementById('viewTabScanner').classList.toggle('active', view==='scanner');
   document.getElementById('viewTabScanner').setAttribute('aria-pressed', String(view==='scanner'));
@@ -5800,6 +5952,8 @@ function switchView(view){
   document.getElementById('viewTabRSI').setAttribute('aria-pressed', String(view==='rsi'));
   document.getElementById('viewTabOB').classList.toggle('active', view==='orderbook');
   document.getElementById('viewTabOB').setAttribute('aria-pressed', String(view==='orderbook'));
+  document.getElementById('viewTabConfluence').classList.toggle('active', view==='confluence');
+  document.getElementById('viewTabConfluence').setAttribute('aria-pressed', String(view==='confluence'));
 
   if(view==='gl'){
     if(glRaw.length) renderGL();
@@ -5812,6 +5966,10 @@ function switchView(view){
   if(view==='orderbook'){
     if(obRaw.length) renderOrderbook();
     else if(!scanning && !obScanning) startScan();
+  }
+  if(view==='confluence'){
+    if(tokenData.length) renderConfluence();
+    else if(!scanning) startScan();
   }
 }
 
@@ -6058,6 +6216,7 @@ async function buildRSIRanking(tokens){
   rsiScanning = false;
   if(currentView === 'rsi') renderRSIRanking();
   if(tdpSymbol) renderTokenDetailBody(tdpSymbol); // popup showing this token — refresh RSI section
+  if(currentView === 'confluence') renderConfluence();
 }
 
 function rsiZoneClass(v){
@@ -6218,6 +6377,8 @@ async function scanOrderbooks(tokens){
   obScanning = false;
   if(currentView === 'orderbook') renderOrderbook();
   if(tdpSymbol) renderTokenDetailBody(tdpSymbol); // popup showing this token — refresh Order Book section
+  if(currentView === 'confluence') renderConfluence();
+  confluenceAlertsCheck(); // Order Book is the last piece Confluence needs — check for alerts now
 
   confirmWalls(); // fire-and-forget — upgrades top candidates in place once the recheck lands
 }
@@ -6260,6 +6421,7 @@ async function confirmWalls(){
   }
   if(currentView === 'orderbook') renderOrderbook();
   if(tdpSymbol) renderTokenDetailBody(tdpSymbol);
+  if(currentView === 'confluence') renderConfluence();
 }
 
 function obWallHtml(price, notional, volPct, side, confirmed){
@@ -6309,6 +6471,187 @@ function renderOrderbook(){
 
   buyBody.innerHTML  = buyPressure.map((t,i)=>obRowHtml(i+1, t, 'buy')).join('')   || '<div class="gl-empty">No buy pressure this scan.</div>';
   sellBody.innerHTML = sellPressure.map((t,i)=>obRowHtml(i+1, t, 'sell')).join('') || '<div class="gl-empty">No sell pressure this scan.</div>';
+}
+
+// ══════════════════════════════════════════════════════════
+// CONFLUENCE — a standalone signal built from RSI + Range (FRVP) + Order
+// Book, independent of whether any chart pattern (3-Drive/FVG/Squeeze) is
+// present at all. At least 2 of the 3 core pillars must be independently
+// "concrete" (not just leaning, genuinely extreme) in the same direction;
+// Support/Resistance adds bonus conviction but never counts as one of the
+// two. Recomputed at render time from whatever source data currently
+// exists, so it fills in progressively as RSI Ranking / Order Book finish,
+// rather than needing all three scans done before showing anything.
+// ══════════════════════════════════════════════════════════
+
+function confluenceRSI(token, dir){
+  const rsiEntry = rsiRaw.find(r => r.symbol === token.symbol);
+  const r1h = rsiEntry ? rsiEntry.rsi1h : (token.rsi && token.rsi.ONE_HOUR);
+  const r4h = rsiEntry ? rsiEntry.rsi4h : (token.rsi && token.rsi.SIX_HOUR);
+  if(r1h == null && r4h == null) return null;
+
+  const isExtreme = v => dir === 'bullish' ? v <= CONF_RSI_EXTREME : v >= (100 - CONF_RSI_EXTREME);
+  const oneOk = r1h != null && isExtreme(r1h);
+  const fourOk = r4h != null && isExtreme(r4h);
+  if(!oneOk && !fourOk) return null;
+
+  const both = oneOk && fourOk;
+  const depthOf = v => dir === 'bullish'
+    ? Math.max(0, Math.min(1, (CONF_RSI_EXTREME - v) / CONF_RSI_EXTREME))
+    : Math.max(0, Math.min(1, (v - (100 - CONF_RSI_EXTREME)) / CONF_RSI_EXTREME));
+  const depth = both ? (depthOf(r1h) + depthOf(r4h)) / 2 : depthOf(oneOk ? r1h : r4h);
+  const points = Math.round((both ? 45 : 30) + depth * 10);
+
+  return { concrete: true, both, r1h, r4h, points };
+}
+
+function confluenceRange(token, dir){
+  const r = token.rangeData;
+  if(!r) return null;
+  const wantStates = dir === 'bullish' ? ['dev-below', 'confirmed-up'] : ['dev-above', 'confirmed-down'];
+  if(!wantStates.includes(r.state)) return null;
+  const confirmed = r.state === 'confirmed-up' || r.state === 'confirmed-down';
+  const points = Math.round((confirmed ? 40 : 30) + (r.qualityScore / 100) * 15);
+  return { concrete: true, state: r.state, confirmed, grade: r.grade, points };
+}
+
+function confluenceOrderbook(token, dir){
+  const ob = obRaw.find(o => o.symbol === token.symbol);
+  if(!ob) return null;
+  const meets = dir === 'bullish' ? ob.imbalance >= CONF_OB_IMBALANCE : ob.imbalance <= -CONF_OB_IMBALANCE;
+  if(!meets) return null;
+  const magnitude = Math.min(1, (Math.abs(ob.imbalance) - CONF_OB_IMBALANCE) / (1 - CONF_OB_IMBALANCE));
+  const points = Math.round(30 + magnitude * 20);
+  return { concrete: true, imbalance: ob.imbalance, wallConfirmed: ob.wallConfirmed, points };
+}
+
+// Independent of pattern detection firing — reuses the same S/R zone finder
+// directly off stored candle data, so it's available even when no 3-Drive
+// pattern exists for this token at all.
+function confluenceSR(token, dir){
+  const ohlc = token.ohlc && token.ohlc.ONE_HOUR;
+  if(!ohlc || !ohlc.closes) return null;
+  let levels;
+  try { levels = findSRLevels(ohlc.closes, ohlc.highs, ohlc.lows, 100); } catch(e){ return null; }
+  if(!levels || !levels.length) return null;
+  const price = token.price;
+  const wantType = dir === 'bullish' ? 'support' : 'resistance';
+  const match = levels.find(l => l.type === wantType && Math.abs(price - l.price) / price <= CONF_SR_TOLERANCE);
+  if(!match) return null;
+  return { active: true, level: match.price, points: 15 };
+}
+
+function computeConfluenceSignal(token, dir){
+  const rsi = confluenceRSI(token, dir);
+  const range = confluenceRange(token, dir);
+  const ob = confluenceOrderbook(token, dir);
+  const pillarCount = [rsi, range, ob].filter(Boolean).length;
+  if(pillarCount < 2) return null; // the hard rule — 2 of 3 core pillars, no exceptions
+
+  const sr = confluenceSR(token, dir);
+  const rawScore = (rsi?.points||0) + (range?.points||0) + (ob?.points||0) + (sr?.points||0);
+  const score = Math.min(100, rawScore);
+  const grade = score >= 75 ? 'A' : 'B';
+
+  return { symbol: token.symbol, name: token.name, price: token.price, direction: dir,
+    rsi, range, ob, sr, pillarCount, score, grade };
+}
+
+// Builds the full confluence list across all scanned tokens, both directions.
+// Called fresh each render — cheap (just arithmetic over already-fetched data).
+function buildConfluenceSignals(){
+  const out = [];
+  for(const token of tokenData){
+    const bull = computeConfluenceSignal(token, 'bullish');
+    if(bull) out.push(bull);
+    const bear = computeConfluenceSignal(token, 'bearish');
+    if(bear) out.push(bear);
+  }
+  return out.sort((a,b) => b.score - a.score);
+}
+
+function confPillarRow(icon, label, active, detail){
+  return `<div class="conf-pillar ${active?'conf-pillar-active':''}">
+    <div class="conf-pillar-icon">${icon}</div>
+    <div class="conf-pillar-label">${label}</div>
+    <div class="conf-pillar-detail">${detail||''}</div>
+  </div>`;
+}
+
+function confluenceCardHtml(sig){
+  const dir = sig.direction;
+  const rsiDetail = sig.rsi ? `${sig.rsi.both ? '1H+4H' : (sig.rsi.r1h!=null && (sig.direction==='bullish'?sig.rsi.r1h<=CONF_RSI_EXTREME:sig.rsi.r1h>=100-CONF_RSI_EXTREME) ? '1H' : '4H')} ${(sig.rsi.r1h??sig.rsi.r4h).toFixed(0)}` : 'not extreme';
+  const rangeDetail = sig.range ? sig.range.state.replace(/-/g,' ') + ` (${sig.range.grade})` : 'no active deviation';
+  const obDetail = sig.ob ? `${sig.ob.imbalance>=0?'+':''}${(sig.ob.imbalance*100).toFixed(0)}%${sig.ob.wallConfirmed?' ✓':''}` : 'imbalance <50%';
+  const bonusHtml = sig.sr ? `<div class="conf-bonus-row">◎ S/R bonus — price at ${fmtPrice(sig.sr.level)}</div>` : '';
+
+  return `<div class="conf-card conf-${dir}" onclick="window.open(tvUrl('${sig.symbol}','ONE_HOUR'),'_blank')" title="Open ${sig.symbol} on TradingView">
+    <div class="conf-card-header">
+      <div>
+        <div class="conf-card-sym">${sig.symbol}</div>
+        <div class="conf-card-price">${fmtPrice(sig.price)}</div>
+      </div>
+      <div class="conf-dir-badge">${dir==='bullish'?'▲ LONG':'▼ SHORT'}</div>
+    </div>
+    <div class="conf-score-row">
+      <span class="conf-score">${sig.score}</span><span class="conf-score-max">/100</span>
+      <span class="conf-grade grade-${sig.grade}">${sig.grade}</span>
+    </div>
+    <div class="conf-bar-track"><div class="conf-bar-fill" style="width:${sig.score}%"></div></div>
+    <div class="conf-pillars">
+      ${confPillarRow('R', 'RSI', !!sig.rsi, rsiDetail)}
+      ${confPillarRow('◈', 'Range', !!sig.range, rangeDetail)}
+      ${confPillarRow('▤', 'Order Book', !!sig.ob, obDetail)}
+    </div>
+    ${bonusHtml}
+  </div>`;
+}
+
+function conf3DriveCardHtml(token, tf, p){
+  const dir = p.signal;
+  const srTag = p.srLevel ? `<span class="conf-3d-tag">◎ ${p.srLevel}</span>` : '';
+  return `<div class="conf-3d-card conf-${dir}" onclick="window.open(tvUrl('${token.symbol}','${tf}'),'_blank')" title="Open ${token.symbol} on TradingView">
+    <div class="conf-3d-header">
+      <div>
+        <div class="conf-3d-sym">${token.symbol}</div>
+        <div class="conf-card-price">${fmtPrice(token.price)}</div>
+      </div>
+      <div class="conf-3d-conf">${p.confidence}%</div>
+    </div>
+    <div class="conf-3d-meta">
+      <span class="conf-3d-tag">${dir==='bullish'?'▲ BULLISH':'▼ BEARISH'}</span>
+      <span class="conf-3d-tag">${TF_LABELS[tf]||tf}</span>
+      ${srTag}
+    </div>
+  </div>`;
+}
+
+function renderConfluence(){
+  const driveGrid = document.getElementById('conf3DriveGrid');
+  const confGrid = document.getElementById('confSignalGrid');
+  if(!driveGrid || !confGrid) return;
+
+  // Three Drives — every active-TF signal across all scanned tokens, sorted by confidence
+  const driveCards = [];
+  for(const token of tokenData){
+    for(const tf of ['SIX_HOUR','ONE_HOUR','THIRTY_MINUTE']){
+      const p = token.patterns && token.patterns[tf];
+      if(p && p.signal !== 'none') driveCards.push({ token, tf, p });
+    }
+  }
+  driveCards.sort((a,b) => b.p.confidence - a.p.confidence);
+  driveGrid.innerHTML = driveCards.length
+    ? driveCards.map(d => conf3DriveCardHtml(d.token, d.tf, d.p)).join('')
+    : '<div class="gl-empty">No Three Drives signals this scan.</div>';
+
+  // Confluence signals
+  const signals = buildConfluenceSignals();
+  confGrid.innerHTML = signals.length
+    ? signals.map(confluenceCardHtml).join('')
+    : '<div class="gl-empty">No confluence signals this scan — needs 2 of RSI/Range/Order Book concrete in the same direction.</div>';
+
+  const upd = document.getElementById('confUpdated');
+  if(upd) upd.textContent = 'last update: '+new Date().toLocaleTimeString();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -7640,6 +7983,9 @@ document.addEventListener('keydown', function(e){
           <label style="display:flex;align-items:center;gap:var(--sp-2);font-family:var(--font-mono);font-size:0.7rem;color:var(--text-2);cursor:pointer">
             <input type="checkbox" id="alertOnSqueeze" onchange="alertSaveSettings()" style="accent-color:var(--purple)"> ◈ BB Squeeze signals
           </label>
+          <label style="display:flex;align-items:center;gap:var(--sp-2);font-family:var(--font-mono);font-size:0.7rem;color:var(--text-2);cursor:pointer">
+            <input type="checkbox" id="alertOnConfluence" onchange="alertSaveSettings()" style="accent-color:var(--blue)"> ⬢ Confluence signals (RSI+Range+OrderBook)
+          </label>
         </div>
       </div>
 
@@ -7667,6 +8013,7 @@ function alertSaveSettings(){
   s.onBull     = document.getElementById('alertOnBull').checked;
   s.onBear     = document.getElementById('alertOnBear').checked;
   s.onSqueeze  = document.getElementById('alertOnSqueeze').checked;
+  s.onConfluence = document.getElementById('alertOnConfluence').checked;
   localStorage.setItem(ALERT_KEY, JSON.stringify(s));
 }
 function alertSaveEmail(){
@@ -7682,6 +8029,7 @@ function openAlerts(){
   document.getElementById('alertOnBull').checked    = s.onBull    !== false;
   document.getElementById('alertOnBear').checked    = s.onBear    !== false;
   document.getElementById('alertOnSqueeze').checked = !!s.onSqueeze;
+  document.getElementById('alertOnConfluence').checked = !!s.onConfluence;
   if(s.lastSent) document.getElementById('alertLastSent').textContent = 'Last sent: '+new Date(s.lastSent).toLocaleString();
   document.getElementById('alertsOverlay').classList.add('open');
   openModalA11y('alertsOverlay');
@@ -7775,6 +8123,43 @@ async function alertsAfterScan(results){
       log(`Alert sent: ${matching.length} signal${matching.length>1?'s':''} → ${s.email}`,'ok');
     }
   } catch(e){ log('Alert send failed: '+e.message,'err'); }
+}
+
+// Confluence alerts fire separately from the main 3-Drive alert pass, because
+// Confluence needs Order Book data — which finishes after the main scan loop,
+// not synchronously with it. Reuses the same email + "min confidence" threshold
+// settings so there's only one set of numbers to configure, not two.
+async function confluenceAlertsCheck(){
+  const s = alertLoadSettings();
+  if(!s.email) return;
+  if(!s.onConfluence) return; // opt-in, off by default
+
+  const threshold = s.threshold || 70;
+  const signals = buildConfluenceSignals().filter(sig => sig.score >= threshold);
+  if(!signals.length) return;
+
+  const matching = signals.map(sig => ({
+    token: sig.symbol, signal: sig.direction, type: 'confluence',
+    tf: '—',
+    price: fmtPrice(sig.price),
+    confidence: sig.score,
+    pillars: [sig.rsi ? 'RSI' : null, sig.range ? 'Range' : null, sig.ob ? 'Order Book' : null].filter(Boolean).join(' + '),
+    srBonus: !!sig.sr,
+  }));
+
+  try {
+    const res = await fetch('/.netlify/functions/send-alert',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email: s.email, alerts: matching })
+    });
+    if(res.ok){
+      const saved = alertLoadSettings();
+      saved.lastSent = Date.now();
+      localStorage.setItem(ALERT_KEY, JSON.stringify(saved));
+      log(`Confluence alert sent: ${matching.length} signal${matching.length>1?'s':''} → ${s.email}`,'ok');
+    }
+  } catch(e){ log('Confluence alert send failed: '+e.message,'err'); }
 }
 </script>
 

@@ -104,8 +104,12 @@ exports.handler = async function (event) {
 
   const signalLabel = a => a.type === 'squeeze' ? '◈ BB SQUEEZE'
     : a.type === 'mtf' ? `★ MTF ${a.signal === 'bullish' ? '↑ BULL' : '↓ BEAR'}`
+    : a.type === 'confluence' ? `⬢ CONFLUENCE ${a.signal === 'bullish' ? '↑ LONG' : '↓ SHORT'}`
     : a.signal === 'bullish' ? '↑ BULL 3-Drive' : '↓ BEAR 3-Drive';
   const signalColor = a => a.type === 'squeeze' ? '#c070ff' : a.signal === 'bullish' ? '#00c9a0' : '#f04468';
+  const srCellHtml = a => a.type === 'confluence'
+    ? (a.srBonus ? `<span style="font-family:monospace;font-size:12px;font-weight:700;color:#f0a800;background:rgba(240,168,0,0.1);padding:2px 8px;border-radius:4px">◎ S/R BONUS</span>` : '<span style="color:#3d5570">—</span>')
+    : (a.srLevel ? `<span style="font-family:monospace;font-size:12px;font-weight:700;color:#f06030;background:rgba(240,96,48,0.1);padding:2px 8px;border-radius:4px">◎ ${esc(String(a.srLevel).toUpperCase())}</span>` : '<span style="color:#3d5570">—</span>');
   const tvUrl = (sym, tf) => {
     const i = { '4H': '240', '1H': '60', '30M': '30' };
     const safeSym = String(sym ?? '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 15);
@@ -120,12 +124,15 @@ exports.handler = async function (event) {
     const trendNote = a.trendConflict
       ? `<div style="margin-top:4px"><span style="font-family:monospace;font-size:10px;font-weight:700;color:#f0a800;background:rgba(240,168,0,0.1);padding:2px 6px;border-radius:4px">⚠ AGAINST 4H TREND${a.trend4h ? ` (4H is ${esc(String(a.trend4h).toUpperCase())})` : ''}</span></div>`
       : '';
+    // Confluence alerts show which pillars fired instead of a timeframe — a timeframe
+    // doesn't really apply to a signal built by combining three separate tools.
+    const tfOrPillars = a.type === 'confluence' ? (a.pillars || '—') : a.tf;
     return `<tr style="border-bottom:1px solid #1a2840">
     <td style="padding:12px 16px"><div style="font-family:monospace;font-size:16px;font-weight:700;color:#d4e2f0">${esc(a.token)}</div><div style="font-family:monospace;font-size:11px;color:#3d5570">${esc(a.price)}</div></td>
-    <td style="padding:12px 16px"><span style="font-family:monospace;font-size:13px;font-weight:700;color:${signalColor(a)}">${esc(signalLabel(a))}</span><div style="font-family:monospace;font-size:11px;color:#3d5570">${esc(a.tf)}</div>${trendNote}</td>
+    <td style="padding:12px 16px"><span style="font-family:monospace;font-size:13px;font-weight:700;color:${signalColor(a)}">${esc(signalLabel(a))}</span><div style="font-family:monospace;font-size:11px;color:#3d5570">${esc(tfOrPillars)}</div>${trendNote}</td>
     <td style="padding:12px 16px;text-align:center"><span style="font-family:monospace;font-size:14px;font-weight:700;color:${conf >= 80 ? '#00c9a0' : conf >= 70 ? '#f0a800' : '#8fa8c0'}">${conf}%</span></td>
-    <td style="padding:12px 16px">${a.srLevel ? `<span style="font-family:monospace;font-size:12px;font-weight:700;color:#f06030;background:rgba(240,96,48,0.1);padding:2px 8px;border-radius:4px">◎ ${esc(String(a.srLevel).toUpperCase())}</span>` : '<span style="color:#3d5570">—</span>'}</td>
-    <td style="padding:12px 16px"><a href="${tvUrl(a.token, a.tf)}" style="font-family:monospace;font-size:12px;color:#00c8f0;text-decoration:none;background:rgba(0,200,240,0.08);padding:4px 10px;border-radius:4px;border:1px solid rgba(0,200,240,0.25)">chart ↗</a></td>
+    <td style="padding:12px 16px">${srCellHtml(a)}</td>
+    <td style="padding:12px 16px"><a href="${tvUrl(a.token, a.type==='confluence'?'1H':a.tf)}" style="font-family:monospace;font-size:12px;color:#00c8f0;text-decoration:none;background:rgba(0,200,240,0.08);padding:4px 10px;border-radius:4px;border:1px solid rgba(0,200,240,0.25)">chart ↗</a></td>
   </tr>`;
   }).join('');
 
