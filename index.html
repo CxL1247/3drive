@@ -2890,7 +2890,7 @@ let obScanning = false;
 // 3-Drive/FVG/Squeeze firing at all. Recomputed at render time from whatever
 // of the three source scans have completed, so it progressively fills in
 // rather than needing to wait for all three before showing anything.
-const CONF_RSI_EXTREME  = 25;   // "deeply" oversold/overbought — stricter than the 30/70 zone used elsewhere
+const CONF_RSI_EXTREME  = 30;   // matches the 30/70 hot/cold zone used everywhere else in the app
 const CONF_OB_IMBALANCE = 0.50; // 50%+ imbalance = real, not marginal, pressure
 const CONF_SR_TOLERANCE = 0.015;// within 1.5% of a support/resistance zone counts as "at" it
 const BB_PERIOD  = 20;
@@ -4635,11 +4635,16 @@ function arTick(){
   }
 }
 
-// Catch up immediately when user returns to tab
+// Catch up immediately when user returns to tab — covers both the auto-scan countdown
+// (which already had this) and the live price WebSocket, which can end up sitting on a
+// closed connection if its reconnect timer got throttled while the tab was inactive.
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible' && arTargetTime){
     if(Date.now()>=arTargetTime){ arStart(); if(!scanning) startScan(); }
     else arTick();
+  }
+  if(document.visibilityState==='visible' && (!ws || ws.readyState === WebSocket.CLOSED)){
+    startLivePrices();
   }
 });
 
@@ -5881,7 +5886,11 @@ async function startScan(){
       `${batch.map(t=>t.symbol).join(' · ')} · ${Math.min(i+BATCH,tokenData.length)}/${tokenData.length}`;
     await Promise.all(batch.map(t=>scanToken(t)));
     renderTable();
-    await new Promise(r=>setTimeout(r,150));
+    // No artificial pause here on purpose — setTimeout gets throttled by browsers on
+    // idle/inactive tabs (can stretch from ms to seconds+), which was directly causing
+    // scans to appear to hang partway through until the user interacted with the page.
+    // Server-side response caching (see proxy.js) plus each batch's real network
+    // round-trip already provide enough natural pacing without needing this.
   }
 
   renderTable();
