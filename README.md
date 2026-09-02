@@ -30,7 +30,15 @@ Log trades (entry/SL/TP/leverage, R-multiple, scale-outs) and open trades get a 
 
 ## Data sources
 
-Candle, ticker, and order book data is fetched from **KuCoin, OKX, Binance, and Bybit** in parallel per request — whichever responds first wins. In practice, Binance and Bybit block requests from many cloud/serverless IP ranges (a documented, general restriction — not specific to any one region), so **KuCoin is often the primary effective source** on serverless deployments, with OKX as secondary. This is also why nothing in the app is hardcoded to a single exchange: if one gets blocked mid-scan, the others silently cover for it.
+Candles are fetched **directly from Binance and Bybit by the browser** first. Both send
+permissive CORS on their public market-data endpoints, and a visitor's own IP is not
+subject to the cloud-range blocking that stops the serverless functions reaching them —
+so this both restores two sources that otherwise contribute nothing and removes a
+function invocation per fetch. If the direct calls fail for any reason (CORS, network,
+an unlisted symbol, a short payload) the proxy path below runs exactly as before.
+
+Ticker and order book data, and any candle fetch the direct path could not serve, go
+through the proxy: **KuCoin, OKX, Binance, and Bybit** in parallel per request — whichever responds first wins. In practice, Binance and Bybit block requests from many cloud/serverless IP ranges (a documented, general restriction — not specific to any one region), so **KuCoin is often the primary effective source** on serverless deployments, with OKX as secondary. This is also why nothing in the app is hardcoded to a single exchange: if one gets blocked mid-scan, the others silently cover for it.
 
 ## Stack
 
@@ -47,6 +55,38 @@ Candle, ticker, and order book data is fetched from **KuCoin, OKX, Binance, and 
 - Binance/Bybit data unavailable when self-hosted on most serverless platforms (IP-range blocking) — the app is designed to degrade to the other exchanges automatically when this happens
 - Order Book and Fixed Range Volume Profile are both approximations built from OHLCV/depth-snapshot data, not tick-level or true liquidation feeds
 - The quality score and A/B grade are **self-assessments, not measured performance**. Hit-rate history lives in localStorage, so it is per-browser and unauditable, and no realized outcome has been scored against fees and slippage yet. The `/signals` endpoint below exists to close that gap
+
+## Range engines — FRVP and V1
+
+The header carries an **FRVP | V1** toggle. It picks which range engine the scanner
+uses, and persists per browser. FRVP is the default.
+
+**FRVP (`range_frvp_v2`)** is a Fixed Range Volume Profile in the literal sense — the
+profile is computed once and then frozen:
+
+1. **Anchor** on the swing high (or low) of a genuine catalyst move.
+2. **Walk forward while candles _close_ inside the box.** Wicks may pierce freely. The
+   lower bound is a consolidation shelf — the densest cluster of following lows — not
+   the lowest wick, so a single spike bar cannot define the boundary that decides where
+   the break is.
+3. **Freeze** at the candle before the first close outside the box, and compute the 70%
+   value area over that window. VAH/POC/VAL never move again.
+4. **Signal on the reclaim.** A close beyond the value area by ≥1.5% followed by a close
+   back inside it. Both legs and the excursion extreme are recorded, so the entry
+   (the reclaim close), the invalidation (beyond the excursion extreme) and the targets
+   (POC, then the far edge) are all stated rather than inferred.
+
+Because a profile can only be frozen once price has left the box, FRVP publishes fewer
+setups than V1 — every one it does publish has a completed structure behind it. Boxes
+that are still contained appear as a dashed **FORMING** badge with the provisional
+bounds and no value-area numbers; there is nothing to trade yet, and the badge says so.
+
+**V1 (`detectRange`)** is the original: it profiles from the anchor to the *current*
+candle and recomputes every scan, so its value area drifts as candles arrive. Kept on
+the toggle so the two can be compared on the same charts.
+
+Each engine has its own constants (`RANGE_*` and `RANGE_V2_*`), so tuning one never
+moves the other.
 
 ## Detection library
 
