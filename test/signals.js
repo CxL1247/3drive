@@ -99,6 +99,8 @@ async function run() {
   check('squeeze present', r.squeeze && typeof r.squeeze.squeezing === 'boolean');
   check('sr levels present', Array.isArray(r.srLevels));
   check('threeDrive present', r.threeDrive && typeof r.threeDrive.signal === 'string');
+  check('both range engines are reported', 'range' in r && 'rangeV2' in r);
+  check('v2 result is either null or tagged as v2', r.rangeV2 === null || r.rangeV2.engine === 'v2');
 
   // The whole point of the endpoint: it must agree with the library the browser
   // runs. If these ever diverge, the measurement is measuring the wrong thing.

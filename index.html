@@ -2024,6 +2024,9 @@ input.ctrl::placeholder { color: var(--text-3); }
   .range-badge.dev-below { color:#f0a800; border-color:#f0a800; background:rgba(240,168,0,0.10); }
   .range-badge.conf-up   { color:#4ade80; border-color:#4ade80; background:rgba(74,222,128,0.10); }
   .range-badge.conf-down { color:#f87171; border-color:#f87171; background:rgba(248,113,113,0.10); }
+  /* Forming: a box that is still contained. Deliberately dimmed and dashed — there is
+     no frozen profile behind it yet, so it must never read as a tradeable signal. */
+  .range-badge.forming   { color:#64748b; border-color:#64748b; border-style:dashed; background:transparent; }
   .range-grade {
     display:inline-flex; align-items:center; justify-content:center;
     min-width:14px; height:14px; padding:0 3px; border-radius:3px;
@@ -2308,6 +2311,10 @@ input.ctrl::placeholder { color: var(--text-3); }
     <div class="tf-group" role="group" aria-label="Data market: perpetual futures or spot">
       <button class="tf-btn" id="marketBtnPerp" onclick="setDataMarket('perp')" aria-pressed="true">PERP</button>
       <button class="tf-btn" id="marketBtnSpot" onclick="setDataMarket('spot')" aria-pressed="false">SPOT</button>
+    </div>
+    <div class="tf-group" role="group" aria-label="Range engine: fixed-range volume profile or legacy">
+      <button class="tf-btn" id="rangeBtnV2" onclick="setRangeEngine('v2')" title="Fixed Range Volume Profile: the profile is frozen at the pre-expansion candle and deviations fire on the reclaim" aria-pressed="true">FRVP</button>
+      <button class="tf-btn" id="rangeBtnV1" onclick="setRangeEngine('v1')" title="Legacy range: profiles from the anchor to the current candle, recomputed every scan" aria-pressed="false">V1</button>
     </div>
     <div class="more-menu">
       <button class="more-toggle" id="moreToggle" onclick="toggleMoreMenu()" title="More" aria-label="More options" aria-haspopup="true" aria-expanded="false">⋯</button>
@@ -3054,6 +3061,30 @@ async function binanceFetch(url, ms=10000) {
 // One call to your own server — server tries KuCoin → OKX → Binance → Bybit internally
 let _candleDiagDone = false;
 let dataMarket = localStorage.getItem('3drive_data_market') || 'perp'; // 'perp' or 'spot'
+// Which range engine the scanner uses. v2 (range_frvp_v2) is the default: it freezes
+// the volume profile at the pre-expansion candle so VAH/POC/VAL stop moving, and it
+// fires on the reclaim rather than the break. v1 remains available for comparison.
+let rangeEngine = localStorage.getItem('3drive_range_engine') || 'v2';
+
+function setRangeEngine(engine) {
+  if(engine === rangeEngine) return;
+  rangeEngine = engine;
+  try { localStorage.setItem('3drive_range_engine', rangeEngine); } catch(e){}
+  applyRangeEngineUI();
+  tokenData.forEach(t => { t.rangeData = null; });
+  log(`Range engine: ${rangeEngine === 'v2' ? 'FRVP (frozen profile)' : 'legacy v1'} — re-scan to apply`, 'warn');
+}
+
+function applyRangeEngineUI() {
+  const v2Btn = document.getElementById('rangeBtnV2');
+  const v1Btn = document.getElementById('rangeBtnV1');
+  if(!v2Btn || !v1Btn) return;
+  v2Btn.classList.toggle('active', rangeEngine === 'v2');
+  v1Btn.classList.toggle('active', rangeEngine === 'v1');
+  v2Btn.setAttribute('aria-pressed', rangeEngine === 'v2' ? 'true' : 'false');
+  v1Btn.setAttribute('aria-pressed', rangeEngine === 'v1' ? 'true' : 'false');
+}
+
 function setDataMarket(market) {
   if(market === dataMarket) return;
   dataMarket = market;
@@ -3409,7 +3440,7 @@ function renderTable(){
   if(activeFilter==='bearish') data=data.filter(t=>Object.values(t.patterns).some(p=>p&&p.signal==='bearish'));
   if(activeFilter==='signal')  data=data.filter(t=>Object.values(t.patterns).some(p=>p&&p.signal!=='none'));
   if(activeFilter==='squeeze') data=data.filter(t=>Object.values(t.squeeze||{}).some(s=>s&&s.squeezing));
-  if(activeFilter==='ranging') data=data.filter(t=>t.rangeData && ['ranging','near-top','near-bottom','dev-above','dev-below','confirmed-up','confirmed-down'].includes(t.rangeData.state));
+  if(activeFilter==='ranging') data=data.filter(t=>t.rangeData && ['ranging','near-top','near-bottom','dev-above','dev-below','confirmed-up','confirmed-down','forming'].includes(t.rangeData.state));
   if(activeFilter==='hconf')   data=data.filter(t=>{
     const s=Object.values(t.patterns).filter(p=>p&&p.signal!=='none');
     // Cutoff raised from 70 to 85 — with the Fibonacci/RSI gates now filtering out weak
@@ -3560,7 +3591,7 @@ function updateStats(){
     return s.length&&s.reduce((a,b)=>a+b.confidence,0)/s.length>=70;
   }).length;
   const squeeze=tokenData.filter(t=>Object.values(t.squeeze||{}).some(s=>s&&s.squeezing)).length;
-  const ranging=tokenData.filter(t=>t.rangeData && ['ranging','near-top','near-bottom','dev-above','dev-below','confirmed-up','confirmed-down'].includes(t.rangeData.state)).length;
+  const ranging=tokenData.filter(t=>t.rangeData && ['ranging','near-top','near-bottom','dev-above','dev-below','confirmed-up','confirmed-down','forming'].includes(t.rangeData.state)).length;
 
   animateStat('s-scanned', scanned, 'sc-scanned');
   animateStat('s-bull',    bull,    'sc-bull');
@@ -3798,10 +3829,18 @@ function getRangeBadgeHTML(token) {
   const pct   = (r.rangePct*100).toFixed(1);
   const cat   = r.catalystPct ? ` · ${r.catalystDir==='up'?'↑':'↓'}${r.catalystPct}% catalyst` : '';
   const swing = r.swings ? ` · ${Math.floor(r.swings/2)} full swings` : '';
-  const va    = ` · VAH ${fmtPrice(r.vah)} / POC ${fmtPrice(r.poc)} / VAL ${fmtPrice(r.val)}`;
+  // A forming box has no frozen profile, so there are no value-area numbers to show.
+  const va    = r.vah != null ? ` · VAH ${fmtPrice(r.vah)} / POC ${fmtPrice(r.poc)} / VAL ${fmtPrice(r.val)}` : '';
+  // Both legs of the round trip, so the reclaim is auditable from the tooltip rather
+  // than merely implied by the state name.
+  const dv    = r.deviation
+    ? ` · left the area at ${fmtPrice(r.deviation.exitClose)}, ran to ${fmtPrice(r.deviation.extremePrice)} (${(r.deviation.excursionPct*100).toFixed(1)}%), reclaimed at ${fmtPrice(r.deviation.returnClose)}`
+    : '';
   const q     = r.qualityScore != null ? ` · Quality ${r.qualityScore}/100 (${r.grade})` : '';
   const chip  = r.grade ? `<span class="range-grade grade-${r.grade}">${r.grade}</span>` : '';
   switch(r.state){
+    case 'forming':
+      return `<div class="range-badge forming" title="Box still contained — ${r.candlesInRange} candles so far${cat}. No value area yet: the profile is only frozen once price closes outside the box.">FORMING ${pct}%</div>`;
     case 'ranging':
       return `<div class="range-badge ranging" title="Value area: ${fmtPrice(r.val)} – ${fmtPrice(r.vah)}${va}${cat}${swing}${q}">${chip} IN VALUE AREA ${pct}%</div>`;
     case 'near-top':
@@ -3813,9 +3852,9 @@ function getRangeBadgeHTML(token) {
     case 'dev-below':
       return `<div class="range-badge dev-below" title="Deviation below VAL -${r.deviationPct}%${va}${cat} · liquidity grab — watch for snap back above VAL${q}">${chip} DEV BELOW VAL -${r.deviationPct}%</div>`;
     case 'confirmed-up':
-      return `<div class="range-badge conf-up" title="Deviation below VAL confirmed — back inside. Target: POC ${fmtPrice(r.poc)}${va}${cat}${q}">${chip} DEV ↑ CONFIRMED</div>`;
+      return `<div class="range-badge conf-up" title="Deviation below VAL confirmed — back inside. Target: POC ${fmtPrice(r.poc)}${va}${dv}${cat}${q}">${chip} DEV ↑ CONFIRMED</div>`;
     case 'confirmed-down':
-      return `<div class="range-badge conf-down" title="Deviation above VAH confirmed — back inside. Target: POC ${fmtPrice(r.poc)}${va}${cat}${q}">${chip} DEV ↓ CONFIRMED</div>`;
+      return `<div class="range-badge conf-down" title="Deviation above VAH confirmed — back inside. Target: POC ${fmtPrice(r.poc)}${va}${dv}${cat}${q}">${chip} DEV ↓ CONFIRMED</div>`;
     default: return '';
   }
 }
@@ -4986,7 +5025,9 @@ async function processTokenTF(token, tf) {
 
     if(!token.rangeData && ohlc.highs && ohlc.lows && ohlc.volumes){
       const approxOpens = closes.map((c,i) => i===0 ? c : closes[i-1]);
-      token.rangeData = detectRange(closes, ohlc.highs, ohlc.lows, ohlc.volumes, approxOpens, tf);
+      token.rangeData = rangeEngine === 'v2'
+        ? detectRangeV2(closes, ohlc.highs, ohlc.lows, ohlc.volumes, approxOpens, tf)
+        : detectRange(closes, ohlc.highs, ohlc.lows, ohlc.volumes, approxOpens, tf);
     }
     if((tf === 'SIX_HOUR' || tf === 'ONE_HOUR') && ohlc.highs && ohlc.lows){
       const approxOpens = closes.map((c,i) => i===0 ? c : closes[i-1]);
@@ -6077,12 +6118,24 @@ function tdpRSISectionHtml(symbol, token){
 function tdpRangeSectionHtml(token){
   const r = token.rangeData;
   if(!r) return '<div class="tdp-empty-mini">No valid range detected this scan</div>';
-  return `
-    <div class="tdp-row"><span class="tdp-row-label">State</span><span class="tdp-row-val">${r.state.replace(/-/g,' ')} <span class="range-grade grade-${r.grade}">${r.grade}</span></span></div>
+  const grade = r.grade ? ` <span class="range-grade grade-${r.grade}">${r.grade}</span>` : '';
+  const stateRow = `<div class="tdp-row"><span class="tdp-row-label">State</span><span class="tdp-row-val">${r.state.replace(/-/g,' ')}${grade}</span></div>`;
+  // Still contained: the profile has not been frozen, so there is nothing honest to
+  // put in the VAH/POC/VAL rows. Show the provisional box and say so instead.
+  if(r.vah == null){
+    return stateRow + `
+    <div class="tdp-row"><span class="tdp-row-label">Box</span><span class="tdp-row-val">${fmtPrice(r.rangeLow)} – ${fmtPrice(r.rangeHigh)}</span></div>
+    <div class="tdp-row"><span class="tdp-row-label">Candles</span><span class="tdp-row-val">${r.candlesInRange} contained</span></div>
+    <div class="tdp-row"><span class="tdp-row-label">Value area</span><span class="tdp-row-val">not frozen yet</span></div>`;
+  }
+  const dev = r.deviation ? `
+    <div class="tdp-row"><span class="tdp-row-label">Deviation</span><span class="tdp-row-val">${fmtPrice(r.deviation.exitClose)} → ${fmtPrice(r.deviation.extremePrice)} → ${fmtPrice(r.deviation.returnClose)}</span></div>
+    <div class="tdp-row"><span class="tdp-row-label">Entry / Inval</span><span class="tdp-row-val">${fmtPrice(r.entry)} / ${fmtPrice(r.invalidation)}</span></div>` : '';
+  return stateRow + `
     <div class="tdp-row"><span class="tdp-row-label">VAH</span><span class="tdp-row-val">${fmtPrice(r.vah)}</span></div>
     <div class="tdp-row"><span class="tdp-row-label">POC</span><span class="tdp-row-val">${fmtPrice(r.poc)}</span></div>
     <div class="tdp-row"><span class="tdp-row-label">VAL</span><span class="tdp-row-val">${fmtPrice(r.val)}</span></div>
-    <div class="tdp-row"><span class="tdp-row-label">Quality</span><span class="tdp-row-val">${r.qualityScore}/100</span></div>`;
+    <div class="tdp-row"><span class="tdp-row-label">Quality</span><span class="tdp-row-val">${r.qualityScore}/100</span></div>` + dev;
 }
 
 function tdpOrderbookSectionHtml(symbol){
@@ -7105,6 +7158,7 @@ function toggleTheme() {
 // Init on load
 initTheme();
 applyDataMarketUI();
+applyRangeEngineUI();
 
 function toggleGuide(){
   const b=document.getElementById('guideBody');

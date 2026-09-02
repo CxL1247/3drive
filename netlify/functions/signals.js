@@ -96,6 +96,10 @@ function analyse(symbol, tf, series) {
   const srLevels = D.findSRLevels(closes, highs, lows, SR_LOOKBACK);
   const rsi = D.calcRSI(closes, RSI_PERIOD);
   const range = D.detectRange(closes, highs, lows, volumes, approxOpens, tf);
+  // Both engines are returned so a consumer can measure them against each other on
+  // identical candles. v2 freezes its profile at the pre-expansion candle; v1
+  // reprofiles to the current candle on every call.
+  const rangeV2 = D.detectRangeV2(closes, highs, lows, volumes, approxOpens, tf);
   const fvgs = D.detectFVGs(closes, highs, lows, approxOpens);
   const squeeze = D.calcBBSqueeze(closes);
   const volStatus = D.classifyVolumeStatus(closes, highs, lows, volumes);
@@ -116,6 +120,7 @@ function analyse(symbol, tf, series) {
     rsi: rsi && rsi.length ? rsi[rsi.length - 1] : null,
     threeDrive,
     range,
+    rangeV2,
     fvg: {
       all: fvgs,
       fresh: fvgs.filter(f => !f.mitigated),
