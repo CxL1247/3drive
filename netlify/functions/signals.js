@@ -88,7 +88,7 @@ function toArrays(candles) {
 
 // Mirrors processTokenTF() in index.html, in the same order, so the verdict here
 // is the verdict the UI would show for the same candles.
-function analyse(symbol, tf, series) {
+function analyse(symbol, tf, series, anchors) {
   const { times, opens, highs, lows, closes, volumes } = series;
   const price = closes[closes.length - 1];
   const approxOpens = closes.map((c, i) => (i === 0 ? c : closes[i - 1]));
@@ -100,6 +100,12 @@ function analyse(symbol, tf, series) {
   // identical candles. v2 freezes its profile at the pre-expansion candle; v1
   // reprofiles to the current candle on every call.
   const rangeV2 = D.detectRangeV2(closes, highs, lows, volumes, approxOpens, tf);
+  // Exact-window profile, when the caller names the two anchors. The author selects
+  // P2 by eye on TradingView, so the discovered window is an approximation of a
+  // discretionary choice; this path reproduces a specific chart instead.
+  const frvp = anchors
+    ? D.frvpFromAnchors(highs, lows, volumes, anchors.p1, anchors.p2, anchors.buckets, anchors.valueAreaPct)
+    : null;
   const fvgs = D.detectFVGs(closes, highs, lows, approxOpens);
   const squeeze = D.calcBBSqueeze(closes);
   const volStatus = D.classifyVolumeStatus(closes, highs, lows, volumes);
@@ -121,6 +127,7 @@ function analyse(symbol, tf, series) {
     threeDrive,
     range,
     rangeV2,
+    frvp,
     fvg: {
       all: fvgs,
       fresh: fvgs.filter(f => !f.mitigated),
@@ -185,8 +192,28 @@ exports.handler = async function (event) {
     const series = toArrays(candles);
     if (!series) { results.push({ symbol, tf, error: 'Candles contain non-finite or non-positive values' }); continue; }
 
+    // Optional: { anchors: { p1, p2, buckets?, valueAreaPct? } } — bar indices into
+    // the candles just supplied. Out-of-range or inverted anchors are rejected rather
+    // than clamped, so a caller cannot silently get a profile of the wrong window.
+    let anchors = null;
+    if (item && item.anchors) {
+      const p1 = Number(item.anchors.p1), p2 = Number(item.anchors.p2);
+      const ok = Number.isInteger(p1) && Number.isInteger(p2)
+        && p1 >= 0 && p2 >= 0 && p1 < candles.length && p2 < candles.length && p1 !== p2;
+      if (!ok) { results.push({ symbol, tf, error: 'anchors.p1/p2 must be distinct bar indices within the candles supplied' }); continue; }
+      const buckets = item.anchors.buckets === undefined ? undefined : Number(item.anchors.buckets);
+      const vaPct = item.anchors.valueAreaPct === undefined ? undefined : Number(item.anchors.valueAreaPct);
+      if (buckets !== undefined && !(Number.isInteger(buckets) && buckets >= 2 && buckets <= 1000)) {
+        results.push({ symbol, tf, error: 'anchors.buckets must be an integer between 2 and 1000' }); continue;
+      }
+      if (vaPct !== undefined && !(vaPct > 0 && vaPct <= 1)) {
+        results.push({ symbol, tf, error: 'anchors.valueAreaPct must be between 0 and 1' }); continue;
+      }
+      anchors = { p1, p2, buckets, valueAreaPct: vaPct };
+    }
+
     try {
-      results.push(analyse(symbol, tf, series));
+      results.push(analyse(symbol, tf, series, anchors));
     } catch (e) {
       // One malformed series must not take down a whole batch.
       results.push({ symbol, tf, error: 'Detector failed: ' + (e && e.message ? e.message : 'unknown') });

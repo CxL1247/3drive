@@ -72,9 +72,14 @@ profile is computed once and then frozen:
 3. **Freeze** at the candle before the first close outside the box, and compute the 70%
    value area over that window. VAH/POC/VAL never move again.
 4. **Signal on the reclaim.** A close beyond the value area by ≥1.5% followed by a close
-   back inside it. Both legs and the excursion extreme are recorded, so the entry
-   (the reclaim close), the invalidation (beyond the excursion extreme) and the targets
-   (POC, then the far edge) are all stated rather than inferred.
+   back inside it. Both legs and the excursion extreme are recorded, so the trade is
+   fully stated rather than inferred: **entry** at the reclaim close, **stop** beyond the
+   excursion extreme, **target** the opposite edge of the value area, and the stop moved
+   to entry at the **Gann 0.5** level.
+
+A Gann box is reported alongside every frozen range — `0` at VAH, `1` at VAL, so `0.5` is
+the midpoint. A strong reclaim candle can close past 0.5, in which case
+`breakevenPassedAtEntry` says so rather than the level being quietly dropped.
 
 Because a profile can only be frozen once price has left the box, FRVP publishes fewer
 setups than V1 — every one it does publish has a completed structure behind it. Boxes
@@ -87,6 +92,39 @@ the toggle so the two can be compared on the same charts.
 
 Each engine has its own constants (`RANGE_*` and `RANGE_V2_*`), so tuning one never
 moves the other.
+
+### Calibration
+
+FRVP uses **100 rows** and a **90% value area**, matching a real TradingView FRVP setup
+(`Row Size 100`, `Value Area Volume 90`) rather than V1's 30 / 70%. Row size alone moves
+the levels a long way, so this is not cosmetic: on the window below, V1's defaults put
+VAH 28 USD lower.
+
+Validated by inversion on ETHUSDT.P 1h (OKX). Searching every (P1, P2) pair over 300 real
+bars for the window that reproduces a labelled chart lands on an 88-bar window,
+2026-08-21 17:00 → 2026-08-25 08:00:
+
+| | computed | labelled chart | delta |
+|---|---|---|---|
+| VAH | 2531.85 | 2532 | −0.15 (−0.006%) |
+| POC | 2427.91 | ~2430 | −2.09 |
+| VAL | 2399.74 | ~2405.5 | −5.76 (3 rows of 1.94) |
+
+The VAH agreement confirms both the distribution maths and the settings. The residual on
+POC and VAL is about 2–3 rows, which is the same order as two other known sources of
+noise: reading a level off a screenshot, and which exchange's volume is used (the same
+window off Binance instead of OKX moves POC and VAL by ~2 USD). It is therefore **not**
+treated as an algorithm difference — a pairwise value-area expansion was tried and moved
+VAL only 1.7 closer while selecting a different window, which is fitting to noise rather
+than evidence.
+
+`RANGE_V2_MAX_BARS` is 120 because that labelled window is 88 bars; a 60-bar cap
+rejected the very setup the engine exists to find.
+
+**Anchor selection is discretionary.** P2 is chosen by eye on the chart, so the shelf rule
+is an approximation of a judgement call, not a reproduction of it. For a specific window,
+`frvpFromAnchors(highs, lows, volumes, p1, p2)` returns the profile for exactly those two
+anchors — reachable over HTTP via the `anchors` field on the signals endpoint.
 
 ## Detection library
 

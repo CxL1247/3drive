@@ -118,6 +118,44 @@ async function run() {
   check('endpoint RSI matches a direct library call',
     r.rsi === D.calcRSI(closes, 14)[closes.length - 1]);
 
+  console.log('\nexact-anchor FRVP path');
+  {
+    const withAnchors = parse(await handler(post({
+      series: [{ symbol: 'BTC', tf: 'ONE_HOUR', candles, anchors: { p1: 63, p2: 99 } }],
+    }))).results[0];
+    check('frvp returned when anchors are supplied', withAnchors.frvp !== null);
+    check('frvp reports the window it was given',
+      withAnchors.frvp.p1Index === 63 && withAnchors.frvp.p2Index === 99);
+    check('frvp echoes the row count and value area used',
+      withAnchors.frvp.buckets === D.RANGE_V2_BUCKETS &&
+      withAnchors.frvp.valueAreaPct === D.RANGE_V2_VALUE_AREA_PCT);
+    check('frvp matches a direct library call',
+      withAnchors.frvp.vah === D.frvpFromAnchors(highs, lows, vols, 63, 99).vah);
+    check('frvp carries the Gann box', withAnchors.frvp.gann.level0 === withAnchors.frvp.vah);
+
+    const noAnchors = parse(await handler(post({ symbol: 'BTC', tf: 'ONE_HOUR', candles }))).results[0];
+    check('frvp is null when no anchors are supplied', noAnchors.frvp === null);
+
+    const overrides = parse(await handler(post({
+      series: [{ symbol: 'BTC', tf: 'ONE_HOUR', candles, anchors: { p1: 63, p2: 99, buckets: 30, valueAreaPct: 0.7 } }],
+    }))).results[0];
+    check('row count and value area can be overridden per request', overrides.frvp.buckets === 30);
+
+    // Bad anchors must be rejected, not clamped — a clamped window would silently
+    // return the profile of a different range than the caller asked for.
+    for (const [label, a] of [
+      ['out of range', { p1: 0, p2: 99999 }],
+      ['negative', { p1: -5, p2: 50 }],
+      ['identical', { p1: 40, p2: 40 }],
+      ['non-integer', { p1: 1.5, p2: 50 }],
+      ['bad bucket count', { p1: 10, p2: 50, buckets: 0 }],
+      ['bad value area', { p1: 10, p2: 50, valueAreaPct: 2 }],
+    ]) {
+      const res = parse(await handler(post({ series: [{ symbol: 'BTC', tf: 'ONE_HOUR', candles, anchors: a }] })));
+      check(`anchors rejected: ${label}`, typeof res.results[0].error === 'string');
+    }
+  }
+
   console.log('\ndetectorVersion behaviour');
   const again = parse(await handler(post({ symbol: 'BTC', tf: 'ONE_HOUR', candles })));
   check('detectorVersion is stable across requests', again.detectorVersion === out.detectorVersion);

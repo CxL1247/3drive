@@ -445,8 +445,29 @@ function rangeV2Tests() {
   check('entry is the reclaim close', r.entry === r.deviation.returnClose);
   check('invalidation sits at or beyond the excursion extreme',
     r.invalidation <= r.deviation.extremePrice + 1e-9);
-  check('targets are POC then the far edge of the value area',
-    r.targets[0] === r.poc && r.targets[1] === r.vah);
+  // The author's words for the short case: "signal a short trade to the val". So the
+  // target is the opposite edge of the value area, not the POC — on a value area this
+  // skewed, POC sits almost on top of the target and is useless as a waypoint.
+  const isLongSide = r.deviation.side === 'below';
+  check('target is the far edge of the value area', r.target === (isLongSide ? r.vah : r.val));
+  check('targets carries exactly that one level', r.targets.length === 1 && r.targets[0] === r.target);
+  check('POC is still reported, just not as a target', typeof r.poc === 'number');
+
+  // The Gann box the author overlays: 0 at VAH, 1 at VAL, so 0.5 is the midpoint.
+  check('Gann 0 is VAH', r.gann.level0 === r.vah);
+  check('Gann 1 is VAL', r.gann.level1 === r.val);
+  check('Gann 0.5 is the midpoint of the value area', r.gann.level05 === (r.vah + r.val) / 2);
+  // 0.5 is where the stop moves to entry — not a stop and not a target, so it has to
+  // sit between the two or the rule is meaningless.
+  check('breakeven level is the Gann 0.5 midpoint', r.breakevenAt === r.gann.level05);
+  // A strong reclaim candle can close past the 0.5 level, so the breakeven trigger is
+  // sometimes already behind price at entry. That is reported, not silently dropped.
+  check('breakeven-passed flag agrees with where entry landed',
+    r.breakevenPassedAtEntry === (isLongSide ? r.entry >= r.breakevenAt : r.entry <= r.breakevenAt));
+  check('when not yet passed, 0.5 sits between entry and target',
+    r.breakevenPassedAtEntry || (r.breakevenAt - r.entry) * (r.target - r.breakevenAt) > 0);
+  check('the 0.5 level always lies inside the value area',
+    r.breakevenAt > r.val && r.breakevenAt < r.vah);
 
   console.log('\ndetectRangeV2 — the forming watch state');
   // Cut the series before the expansion: containment is still ongoing, so no
@@ -497,8 +518,42 @@ function rangeV2Tests() {
   check('v2 tags itself so the UI can tell the engines apart', r.engine === 'v2');
   check('v2 constants are separate from v1 constants',
     'RANGE_V2_MIN_QUALITY' in D.DETECTOR_CONSTANTS && 'RANGE_MIN_QUALITY' in D.DETECTOR_CONSTANTS);
-}
 
+  console.log('\ndetectRangeV2 — calibration against the author\'s TradingView setup');
+  // Read straight off the author's FRVP settings dialog. These are NOT the v1 values,
+  // and row size alone moves the levels a long way, so they are pinned here.
+  check('row count matches TradingView Row Size 100', D.RANGE_V2_BUCKETS === 100);
+  check('value area matches TradingView Value Area Volume 90', D.RANGE_V2_VALUE_AREA_PCT === 0.90);
+  check('v1 keeps its own 30 / 70% defaults', D.VP_BUCKETS === 30 && D.VALUE_AREA_PCT === 0.70);
+  // The author's own labelled window is 88 bars. A 60-bar cap rejected it outright.
+  check('max window is long enough for an 88-bar window', D.RANGE_V2_MAX_BARS >= 88);
+  // computeVolumeProfile must still behave exactly as before when called with five args.
+  const fh = [107, 107, 107], fl = [100, 100, 100], fv = [10, 10, 10];
+  check('computeVolumeProfile with 5 args is unchanged v1 behaviour',
+    D.computeVolumeProfile(fh, fl, fv, 0, 2).vah === D.computeVolumeProfile(fh, fl, fv, 0, 2, 30, 0.70).vah);
+  check('computeVolumeProfile honours an explicit row count',
+    D.computeVolumeProfile(fh, fl, fv, 0, 2, 100, 0.90).vah !== D.computeVolumeProfile(fh, fl, fv, 0, 2, 30, 0.70).vah);
+
+  console.log('\nfrvpFromAnchors — the exact-window path');
+  // The author selects P2 by eye, so the discovered window is an approximation of a
+  // discretionary choice. This is the path that can reproduce a chart exactly.
+  const fx = buildV2();
+  const anch = D.frvpFromAnchors(fx.h, fx.l, fx.v, 63, fx.boxEnd);
+  check('returns the window it was given', anch.p1Index === 63 && anch.p2Index === fx.boxEnd);
+  check('bar count is inclusive', anch.bars === fx.boxEnd - 63 + 1);
+  check('VAL < POC < VAH', anch.val < anch.poc && anch.poc < anch.vah);
+  check('echoes the settings used, so a mismatch with TradingView is diagnosable',
+    anch.buckets === D.RANGE_V2_BUCKETS && anch.valueAreaPct === D.RANGE_V2_VALUE_AREA_PCT);
+  check('reports row height, the unit any residual disagreement is measured in',
+    Math.abs(anch.rowHeight - (anch.rangeHigh - anch.rangeLow) / anch.buckets) < 1e-9);
+  check('carries the Gann box', anch.gann.level0 === anch.vah && anch.gann.level1 === anch.val);
+  check('accepts an override row count', D.frvpFromAnchors(fx.h, fx.l, fx.v, 63, fx.boxEnd, 30, 0.70).buckets === 30);
+  check('anchors given in reverse order are normalised',
+    D.frvpFromAnchors(fx.h, fx.l, fx.v, fx.boxEnd, 63).p1Index === 63);
+  check('a degenerate window returns null', D.frvpFromAnchors(fx.h, fx.l, fx.v, 10, 10) === null);
+  check('agrees with detectRangeV2 for the same window',
+    Math.abs(D.frvpFromAnchors(fx.h, fx.l, fx.v, r.window.p1Index, r.window.p2Index).vah - r.vah) < 1e-9);
+}
 volumeProfileTests();
 rsiTests();
 emaTests();

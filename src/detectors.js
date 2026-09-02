@@ -641,13 +641,18 @@ const RANGE_ENABLED_TFS  = new Set(["SIX_HOUR", "ONE_HOUR", "THIRTY_MINUTE"]); /
 // the Point of Control (highest-volume price) and the Value Area High/Low
 // (the tightest price band containing VALUE_AREA_PCT of total volume, expanded
 // outward from POC one bucket at a time toward whichever side has more volume).
-function computeVolumeProfile(highs, lows, volumes, fromIdx, toIdx){
+// buckets/valueAreaPct default to the v1 constants, so calling this with five
+// arguments behaves exactly as it always has. range_frvp_v2 passes its own values to
+// match the author's TradingView FRVP settings (Row Size 100, Value Area Volume 90).
+function computeVolumeProfile(highs, lows, volumes, fromIdx, toIdx, buckets, valueAreaPct){
+  const N  = buckets || VP_BUCKETS;
+  const VA = valueAreaPct || VALUE_AREA_PCT;
   const priceMax = Math.max(...highs.slice(fromIdx, toIdx+1));
   const priceMin = Math.min(...lows.slice(fromIdx, toIdx+1));
   if(!(priceMax > priceMin)) return null;
 
-  const bucketSize = (priceMax - priceMin) / VP_BUCKETS;
-  const vol = new Array(VP_BUCKETS).fill(0);
+  const bucketSize = (priceMax - priceMin) / N;
+  const vol = new Array(N).fill(0);
   const bucketLow  = j => priceMin + j*bucketSize;
   const bucketHigh = j => priceMin + (j+1)*bucketSize;
 
@@ -655,12 +660,12 @@ function computeVolumeProfile(highs, lows, volumes, fromIdx, toIdx){
     const h = highs[i], l = lows[i], v = volumes[i] || 0;
     if(!(v>0)) continue;
     if(h === l){
-      const j = Math.min(VP_BUCKETS-1, Math.max(0, Math.floor((h-priceMin)/bucketSize)));
+      const j = Math.min(N-1, Math.max(0, Math.floor((h-priceMin)/bucketSize)));
       vol[j] += v;
       continue;
     }
     const jLo = Math.max(0, Math.floor((l-priceMin)/bucketSize));
-    const jHi = Math.min(VP_BUCKETS-1, Math.floor((h-priceMin)/bucketSize));
+    const jHi = Math.min(N-1, Math.floor((h-priceMin)/bucketSize));
     for(let j=jLo; j<=jHi; j++){
       const overlap = Math.min(h, bucketHigh(j)) - Math.max(l, bucketLow(j));
       if(overlap > 0) vol[j] += v * (overlap/(h-l));
@@ -671,13 +676,13 @@ function computeVolumeProfile(highs, lows, volumes, fromIdx, toIdx){
   if(!(total>0)) return null;
 
   let pocIdx = 0;
-  for(let j=1;j<VP_BUCKETS;j++) if(vol[j]>vol[pocIdx]) pocIdx=j;
+  for(let j=1;j<N;j++) if(vol[j]>vol[pocIdx]) pocIdx=j;
 
   let lowIdx = pocIdx, highIdx = pocIdx, cum = vol[pocIdx];
-  const target = total * VALUE_AREA_PCT;
-  while(cum < target && (lowIdx>0 || highIdx<VP_BUCKETS-1)){
+  const target = total * VA;
+  while(cum < target && (lowIdx>0 || highIdx<N-1)){
     const nextLowVol  = lowIdx>0 ? vol[lowIdx-1] : -1;
-    const nextHighVol = highIdx<VP_BUCKETS-1 ? vol[highIdx+1] : -1;
+    const nextHighVol = highIdx<N-1 ? vol[highIdx+1] : -1;
     if(nextHighVol >= nextLowVol){ highIdx++; cum += vol[highIdx]; }
     else { lowIdx--; cum += vol[lowIdx]; }
   }
@@ -887,13 +892,40 @@ const RANGE_V2_SHELF_TOL_ATR     = 0.35;  // shelf band width, in ATRs
 const RANGE_V2_SHELF_MIN_TOUCHES = 3;     // a band needs this many lows to count as a shelf
 const RANGE_V2_FORMING_MIN_BARS  = 6;     // below this a still-open box is noise, not a watch
 const RANGE_V2_MIN_BARS          = 12;    // contained candles required to freeze
-const RANGE_V2_MAX_BARS          = 60;    // window longer than this is not a range
+const RANGE_V2_MAX_BARS          = 120;   // see the calibration note below
+const RANGE_V2_BUCKETS           = 100;   // TradingView FRVP "Row Size"
+const RANGE_V2_VALUE_AREA_PCT    = 0.90;  // TradingView FRVP "Value Area Volume"
 const RANGE_V2_MIN_WIDTH         = 0.03;  // structural box must be >= 3% wide
 const RANGE_V2_MAX_WIDTH         = 0.18;  // structural box must be <= 18% wide
 const RANGE_V2_DEV_THRESHOLD     = 0.015; // 1.5%+ beyond VAH/VAL counts as leaving the area
 const RANGE_V2_DEV_MAX_BARS      = 60;    // give up on the reclaim after this many candles
 const RANGE_V2_MIN_QUALITY       = 65;    // 0-100 composite floor, separate from v1's
 const RANGE_V2_ENABLED_TFS       = new Set(["SIX_HOUR", "ONE_HOUR", "THIRTY_MINUTE"]);
+
+// ── Calibration, 2026-09-02 ───────────────────────────────────────────────────
+// The row count and value-area percentage are NOT the v1 defaults (30 / 70%). They
+// are read directly from the author's FRVP settings dialog: Row Size 100, Value Area
+// Volume 90. Row size alone moves the levels a long way, so this is not cosmetic.
+//
+// Validated by inversion against a labelled ETHUSDT.P 1h chart (OKX): searching every
+// (P1, P2) pair over 300 real bars for the window reproducing the author's marked
+// levels lands on an 88-bar window, 2026-08-21 17:00 -> 2026-08-25 08:00, giving
+//
+//     VAH 2531.85  against 2532 read off the chart   (-0.15, -0.006%)
+//     POC 2427.91  against ~2430                     (-2.09)
+//     VAL 2399.74  against ~2405.5                   (-5.76, 3 rows of 1.94)
+//
+// The VAH agreement to 0.15 confirms the distribution maths and the settings. The VAL
+// gap is about three rows, which is inside the error of reading that line off a
+// screenshot, so it is NOT treated as an algorithm difference: a pairwise value-area
+// expansion (the Market Profile convention) was tried and moved VAL only 1.7 closer
+// while selecting a different window, which is not evidence — it is fitting to
+// measurement noise. Left alone deliberately.
+//
+// MAX_BARS was 60 and is now 120: the author's own window is 88 bars, so the old cap
+// rejected the very setup this engine exists to find. The author selects P2 by eye,
+// so the shelf rule below is an APPROXIMATION of a discretionary choice, not a
+// reproduction of it. frvpFromAnchors() exists for the exact-window case.
 
 function v2Median(values) {
   const s = values.slice().sort((a, b) => a - b);
@@ -1100,27 +1132,59 @@ function v2CountSwings(highs, lows, win, area) {
   return swings;
 }
 
-// Same five components as v1, so the two engines' scores stay comparable. The one
-// difference is freshness, which measures distance from the EXPANSION rather than
-// from the anchor — for a frozen window that is what "how live is this setup" means.
+// Four components. v1 has a fifth — "tightness", how much narrower the value area is
+// than the structural box — and it is deliberately NOT used here.
+//
+// At a 90% value area the value area fills almost the whole box by construction, so
+// tightness stops discriminating between setups and just subtracts a roughly constant
+// amount from everything. Measured: 12/100 on a synthetic box and 29/100 on the
+// author's real ETH window, i.e. about 18 points off every v2 score, which pushed
+// genuine setups under the floor. Dropping the term is the fix; lowering the floor
+// instead would have hidden the cause.
+//
+// Freshness also differs from v1: it measures distance from the EXPANSION rather than
+// from the anchor, which for a frozen window is what "how live is this setup" means.
 function v2Quality(cat, win, area, swings, lastIdx) {
   const catalystStrength = Math.max(0, Math.min(100, 50 + (cat.movePct / cat.requiredPct - 1) * 50));
   const volumeStrength = cat.baseVol > 0
     ? Math.max(0, Math.min(100, 50 + (cat.legVol / (cat.baseVol * RANGE_V2_CATALYST_VOL_MULT) - 1) * 50))
     : 50;
-  const boxSpan = win.rangeHigh - win.rangeLow;
-  const tightness = boxSpan > 0 ? 1 - (area.vah - area.val) / boxSpan : 0;
-  const tightnessScore = Math.max(0, Math.min(100, tightness * 100));
   const age = lastIdx - win.expansionIndex;
   const freshnessScore = Math.max(0, Math.min(100, 100 - (age / RANGE_V2_DEV_MAX_BARS) * 100));
   const swingScore = Math.max(0, Math.min(100, (swings / (FULL_SWING_MIN * 4)) * 100));
   return Math.round(
-    catalystStrength * 0.25 +
-    volumeStrength   * 0.25 +
-    tightnessScore   * 0.25 +
-    freshnessScore   * 0.15 +
-    swingScore       * 0.10
+    catalystStrength * 0.30 +
+    volumeStrength   * 0.30 +
+    freshnessScore   * 0.25 +
+    swingScore       * 0.15
   );
+}
+
+// The profile for a window whose anchors are given, rather than discovered. The author
+// picks P2 by eye on TradingView, so this is the path that can match their chart
+// exactly: hand it the two bar indices and it returns the same VAH/POC/VAL their
+// FRVP draws, using their row count and value area.
+function frvpFromAnchors(highs, lows, volumes, p1Index, p2Index, buckets, valueAreaPct) {
+  const n = Math.min(highs.length, lows.length, volumes.length);
+  const a = Math.max(0, Math.min(p1Index, p2Index));
+  const b = Math.min(n - 1, Math.max(p1Index, p2Index));
+  if (!(b > a)) return null;
+  const area = computeVolumeProfile(highs, lows, volumes, a, b,
+    buckets || RANGE_V2_BUCKETS, valueAreaPct || RANGE_V2_VALUE_AREA_PCT);
+  if (!area) return null;
+  const rangeHigh = Math.max(...highs.slice(a, b + 1));
+  const rangeLow  = Math.min(...lows.slice(a, b + 1));
+  return {
+    p1Index: a, p2Index: b, bars: b - a + 1,
+    vah: area.vah, poc: area.poc, val: area.val,
+    midpoint: (area.vah + area.val) / 2,
+    rangeHigh, rangeLow,
+    rowHeight: (rangeHigh - rangeLow) / (buckets || RANGE_V2_BUCKETS),
+    buckets: buckets || RANGE_V2_BUCKETS,
+    valueAreaPct: valueAreaPct || RANGE_V2_VALUE_AREA_PCT,
+    // The Gann box the author overlays: 0 at VAH, 1 at VAL, so 0.5 is the midpoint.
+    gann: { level0: area.vah, level05: (area.vah + area.val) / 2, level1: area.val },
+  };
 }
 
 // Same signature and same return shape as detectRange, so every consumer in
@@ -1161,7 +1225,8 @@ function detectRangeV2(closes, highs, lows, volumes, opens, tfKey) {
       seen.add(key);
 
       if(lastIdx - win.expansionIndex > RANGE_V2_DEV_MAX_BARS) continue; // stale
-      const area = computeVolumeProfile(highs, lows, volumes, win.p1Index, win.p2Index);
+      const area = computeVolumeProfile(highs, lows, volumes, win.p1Index, win.p2Index,
+        RANGE_V2_BUCKETS, RANGE_V2_VALUE_AREA_PCT);
       if(!area) continue;
       frozen.push({ win, cat, area });
     }
@@ -1237,12 +1302,32 @@ function detectRangeV2(closes, highs, lows, volumes, opens, tfKey) {
   if(state === 'dev-below') result.deviationPct = (((area.val - close) / area.val) * 100).toFixed(1);
   if(state === 'dev-above') result.deviationPct = (((close - area.vah) / area.vah) * 100).toFixed(1);
 
+  // The Gann box the author overlays on the frozen value area: 0 at VAH, 1 at VAL.
+  result.gann = { level0: area.vah, level05: result.midpoint, level1: area.val };
+
   if(bestDev){
+    const long = bestDev.side === 'below';   // reclaimed from below VAL = long side
     result.entry = bestDev.returnClose;
-    result.invalidation = bestDev.side === 'below'
+    // Hard stop beyond the excursion extreme: if price loses the low (or high) the
+    // reclaim was built on, the reclaim failed.
+    result.invalidation = long
       ? Math.min(bestDev.extremePrice, win.rangeLow)
       : Math.max(bestDev.extremePrice, win.rangeHigh);
-    result.targets = bestDev.side === 'below' ? [area.poc, area.vah] : [area.poc, area.val];
+    // Target is the opposite edge of the value area — the author's words for the
+    // short case are "a short trade to the val".
+    result.target = long ? area.vah : area.val;
+    // Gann 0.5. Not a stop and not a target: the level at which the stop is moved to
+    // entry, so the trade is risk-free for the second half of the move. POC is left
+    // as a field rather than a target because on a value area this skewed it sits
+    // almost on top of the target and carries no information as a waypoint.
+    result.breakevenAt = result.midpoint;
+    // The 0.5 level belongs to the range, not to the trade, so it is always reported.
+    // A strong reclaim candle can close beyond it, which means the breakeven trigger
+    // is already behind price at entry — a real case, flagged rather than hidden.
+    result.breakevenPassedAtEntry = long
+      ? result.entry >= result.breakevenAt
+      : result.entry <= result.breakevenAt;
+    result.targets = [result.target];
   }
   return result;
 }
@@ -1268,6 +1353,8 @@ var DETECTOR_CONSTANTS = Object.freeze({
   RANGE_V2_FORMING_MIN_BARS: RANGE_V2_FORMING_MIN_BARS,
   RANGE_V2_MIN_BARS: RANGE_V2_MIN_BARS,
   RANGE_V2_MAX_BARS: RANGE_V2_MAX_BARS,
+  RANGE_V2_VALUE_AREA_PCT: RANGE_V2_VALUE_AREA_PCT,
+  RANGE_V2_BUCKETS: RANGE_V2_BUCKETS,
   RANGE_V2_MIN_WIDTH: RANGE_V2_MIN_WIDTH,
   RANGE_V2_MAX_WIDTH: RANGE_V2_MAX_WIDTH,
   RANGE_V2_DEV_THRESHOLD: RANGE_V2_DEV_THRESHOLD,
@@ -1331,6 +1418,7 @@ return {
   computeVolumeProfile: computeVolumeProfile,
   detectRange: detectRange,
   detectRangeV2: detectRangeV2,
+  frvpFromAnchors: frvpFromAnchors,
   findConsolidationShelf: findConsolidationShelf,
   discoverRangeWindow: discoverRangeWindow,
   findDeviation: findDeviation,
@@ -1380,6 +1468,8 @@ return {
   RANGE_V2_FORMING_MIN_BARS: RANGE_V2_FORMING_MIN_BARS,
   RANGE_V2_MIN_BARS: RANGE_V2_MIN_BARS,
   RANGE_V2_MAX_BARS: RANGE_V2_MAX_BARS,
+  RANGE_V2_VALUE_AREA_PCT: RANGE_V2_VALUE_AREA_PCT,
+  RANGE_V2_BUCKETS: RANGE_V2_BUCKETS,
   RANGE_V2_MIN_WIDTH: RANGE_V2_MIN_WIDTH,
   RANGE_V2_MAX_WIDTH: RANGE_V2_MAX_WIDTH,
   RANGE_V2_DEV_THRESHOLD: RANGE_V2_DEV_THRESHOLD,

@@ -3836,6 +3836,11 @@ function getRangeBadgeHTML(token) {
   const dv    = r.deviation
     ? ` · left the area at ${fmtPrice(r.deviation.exitClose)}, ran to ${fmtPrice(r.deviation.extremePrice)} (${(r.deviation.excursionPct*100).toFixed(1)}%), reclaimed at ${fmtPrice(r.deviation.returnClose)}`
     : '';
+  // The plan the author trades: enter on the reclaim, target the far edge of the value
+  // area, move the stop to entry at the Gann 0.5.
+  const plan  = r.deviation && r.target != null
+    ? ` · entry ${fmtPrice(r.entry)} → target ${fmtPrice(r.target)}, stop ${fmtPrice(r.invalidation)}, BE at ${fmtPrice(r.breakevenAt)}`
+    : '';
   const q     = r.qualityScore != null ? ` · Quality ${r.qualityScore}/100 (${r.grade})` : '';
   const chip  = r.grade ? `<span class="range-grade grade-${r.grade}">${r.grade}</span>` : '';
   switch(r.state){
@@ -3852,9 +3857,9 @@ function getRangeBadgeHTML(token) {
     case 'dev-below':
       return `<div class="range-badge dev-below" title="Deviation below VAL -${r.deviationPct}%${va}${cat} · liquidity grab — watch for snap back above VAL${q}">${chip} DEV BELOW VAL -${r.deviationPct}%</div>`;
     case 'confirmed-up':
-      return `<div class="range-badge conf-up" title="Deviation below VAL confirmed — back inside. Target: POC ${fmtPrice(r.poc)}${va}${dv}${cat}${q}">${chip} DEV ↑ CONFIRMED</div>`;
+      return `<div class="range-badge conf-up" title="Deviation below VAL confirmed — back inside. Target: POC ${fmtPrice(r.poc)}${va}${dv}${plan}${cat}${q}">${chip} DEV ↑ CONFIRMED</div>`;
     case 'confirmed-down':
-      return `<div class="range-badge conf-down" title="Deviation above VAH confirmed — back inside. Target: POC ${fmtPrice(r.poc)}${va}${dv}${cat}${q}">${chip} DEV ↓ CONFIRMED</div>`;
+      return `<div class="range-badge conf-down" title="Deviation above VAH confirmed — back inside. Target: POC ${fmtPrice(r.poc)}${va}${dv}${plan}${cat}${q}">${chip} DEV ↓ CONFIRMED</div>`;
     default: return '';
   }
 }
@@ -6128,14 +6133,20 @@ function tdpRangeSectionHtml(token){
     <div class="tdp-row"><span class="tdp-row-label">Candles</span><span class="tdp-row-val">${r.candlesInRange} contained</span></div>
     <div class="tdp-row"><span class="tdp-row-label">Value area</span><span class="tdp-row-val">not frozen yet</span></div>`;
   }
+  // Gann box over the frozen value area: 0 at VAH, 1 at VAL, 0.5 the midpoint. Shown
+  // for any frozen range, since the levels are a property of the range itself.
+  const gann = r.gann ? `
+    <div class="tdp-row"><span class="tdp-row-label">Gann 0 / 0.5 / 1</span><span class="tdp-row-val">${fmtPrice(r.gann.level0)} / ${fmtPrice(r.gann.level05)} / ${fmtPrice(r.gann.level1)}</span></div>` : '';
   const dev = r.deviation ? `
     <div class="tdp-row"><span class="tdp-row-label">Deviation</span><span class="tdp-row-val">${fmtPrice(r.deviation.exitClose)} → ${fmtPrice(r.deviation.extremePrice)} → ${fmtPrice(r.deviation.returnClose)}</span></div>
-    <div class="tdp-row"><span class="tdp-row-label">Entry / Inval</span><span class="tdp-row-val">${fmtPrice(r.entry)} / ${fmtPrice(r.invalidation)}</span></div>` : '';
+    <div class="tdp-row"><span class="tdp-row-label">Entry / Stop</span><span class="tdp-row-val">${fmtPrice(r.entry)} / ${fmtPrice(r.invalidation)}</span></div>
+    <div class="tdp-row"><span class="tdp-row-label">Target</span><span class="tdp-row-val">${fmtPrice(r.target)}</span></div>
+    <div class="tdp-row"><span class="tdp-row-label">Stop → BE at</span><span class="tdp-row-val">${fmtPrice(r.breakevenAt)}${r.breakevenPassedAtEntry ? ' (already passed at entry)' : ''}</span></div>` : '';
   return stateRow + `
     <div class="tdp-row"><span class="tdp-row-label">VAH</span><span class="tdp-row-val">${fmtPrice(r.vah)}</span></div>
     <div class="tdp-row"><span class="tdp-row-label">POC</span><span class="tdp-row-val">${fmtPrice(r.poc)}</span></div>
     <div class="tdp-row"><span class="tdp-row-label">VAL</span><span class="tdp-row-val">${fmtPrice(r.val)}</span></div>
-    <div class="tdp-row"><span class="tdp-row-label">Quality</span><span class="tdp-row-val">${r.qualityScore}/100</span></div>` + dev;
+    <div class="tdp-row"><span class="tdp-row-label">Quality</span><span class="tdp-row-val">${r.qualityScore}/100</span></div>` + gann + dev;
 }
 
 function tdpOrderbookSectionHtml(symbol){
