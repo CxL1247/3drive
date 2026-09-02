@@ -3072,8 +3072,78 @@ function applyDataMarketUI() {
   spotBtn.setAttribute('aria-pressed', dataMarket === 'spot' ? 'true' : 'false');
 }
 
+// ── Browser-direct exchange access ────────────────────────────────────────────
+// Binance and Bybit reject many cloud/serverless IP ranges, which is why the proxy's
+// four-way race almost always resolves to KuCoin or OKX — those two exchanges
+// contribute nothing in practice. The visitor's own IP is not blocked, and both send
+// permissive CORS on their public market-data endpoints, so the page can reach them
+// itself. That restores two sources and, because it runs before the proxy, also cuts
+// function invocations.
+//
+// Everything here is best-effort: any CORS, network, shape or listing failure simply
+// loses, and the proxy path runs exactly as it did before.
+const DIRECT_TF_MAP = {
+  SIX_HOUR:      { bin:'4h',  bybit:'240' },
+  ONE_HOUR:      { bin:'1h',  bybit:'60'  },
+  THIRTY_MINUTE: { bin:'30m', bybit:'30'  },
+  FIFTEEN_MINUTE:{ bin:'15m', bybit:'15'  },
+};
+const DIRECT_TIMEOUT_MS = 8000;
+
+// Both exchanges return [time, open, high, low, close, volume, …]; Bybit lists
+// newest-first. Mirrors the proxy's parsers so either path yields the same shape.
+function shapeDirectCandles(rows, newestFirst, source){
+  if(!Array.isArray(rows) || rows.length < 40) return null;
+  const r = newestFirst ? [...rows].reverse() : rows;
+  return {
+    closes:  r.map(x => +x[4]),
+    highs:   r.map(x => +x[2]),
+    lows:    r.map(x => +x[3]),
+    volumes: r.map(x => +x[5]),
+    times:   r.map(x => +x[0]),
+    source,
+  };
+}
+
+async function fetchCandlesDirect(symbol, tfKey) {
+  const tf = DIRECT_TF_MAP[tfKey];
+  if(!tf) return null;
+  const perp = dataMarket === 'perp';
+  const sym  = symbol + 'USDT';
+  const sources = [
+    { url: perp
+        ? `https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=${tf.bin}&limit=300`
+        : `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${tf.bin}&limit=300`,
+      parse: d => shapeDirectCandles(d, false, perp ? 'binance-perp·direct' : 'binance·direct') },
+    { url: `https://api.bybit.com/v5/market/kline?category=${perp ? 'linear' : 'spot'}&symbol=${sym}&interval=${tf.bybit}&limit=300`,
+      parse: d => shapeDirectCandles(d && d.result && d.result.list, true, perp ? 'bybit-perp·direct' : 'bybit·direct') },
+  ];
+
+  const attempt = async (src) => {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), DIRECT_TIMEOUT_MS);
+    try {
+      const res = await fetch(src.url, { signal: ctl.signal, cache: 'no-store' });
+      if(!res.ok) throw new Error('http ' + res.status);
+      const parsed = src.parse(await res.json());
+      if(!parsed) throw new Error('unusable payload');   // reject so the race moves on
+      return parsed;
+    } finally { clearTimeout(timer); }
+  };
+
+  try { return await Promise.any(sources.map(attempt)); }
+  catch(e) { return null; }   // every direct source failed — the proxy takes over
+}
+
 async function fetchCandles(productId, symbol, tfKey) {
   const diag = !_candleDiagDone;
+
+  const direct = await fetchCandlesDirect(symbol, tfKey);
+  if(direct){
+    if(diag){ _candleDiagDone=true; log(`Candle source: ${direct.source} (${dataMarket}) ✓`,'ok'); }
+    return direct;
+  }
+
   const r = await serverFetch({ action:'candles', symbol, tf:tfKey, market:dataMarket }, 25000);
   if(r.ok){
     const data = await r.json();
