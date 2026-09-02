@@ -854,6 +854,399 @@ function detectRange(closes, highs, lows, volumes, opens, tfKey) {
   return { state:"ranging", ...meta };
 }
 
+// ─── range_frvp_v2 ────────────────────────────────────────────────────────────
+// A Fixed Range Volume Profile in the literal sense: the profile is computed ONCE
+// over a completed structural window and then never recomputed. detectRange (v1)
+// profiles from the anchor to the CURRENT candle on every scan, so its VAH/POC/VAL
+// drift as candles arrive — the lines move underneath the trade.
+//
+// Three stages, every boundary judged on CLOSES so a wick can never end a range:
+//
+//   1. window     P1 = a swing high (or low) reached by a genuine catalyst move.
+//                 Walk forward while closes stay inside [shelf, P1.high]. P2 = the
+//                 last contained candle; the next one is the expansion.
+//   2. profile    computeVolumeProfile over [P1..P2] -> VAH/POC/VAL, then FROZEN.
+//   3. deviation  a close beyond the value area by >= threshold, then a close back
+//                 INSIDE it. The signal fires on the reclaim, not on the break.
+//
+// The move that ends the window is itself the first deviation candidate, which is
+// the common case: price leaves the box and immediately reclaims it.
+//
+// Ported from sentinel/venues/cryptospot/frvp.py. Constants are deliberately kept
+// separate from the v1 RANGE_*/CATALYST_* block so tuning one engine can never
+// silently move the other.
+
+const RANGE_V2_CATALYST_MIN_PCT  = 0.025; // catalyst move must be >= 2.5% (absolute floor)
+const RANGE_V2_CATALYST_MAX_BARS = 6;     // catalyst completes within 6 candles
+const RANGE_V2_BASELINE_LOOKBACK = 20;    // candles before the anchor used as its own baseline
+const RANGE_V2_CATALYST_ATR_MULT = 4.0;   // move must be 4x the token's own avg candle range
+const RANGE_V2_CATALYST_VOL_MULT = 1.5;   // move must carry 1.5x its own avg volume
+const RANGE_V2_SWING_WIN         = 3;     // fractal window for anchor selection
+const RANGE_V2_SHELF_SCOUT_BARS  = 12;    // how far past the anchor to look for the shelf
+const RANGE_V2_SHELF_TOL_ATR     = 0.35;  // shelf band width, in ATRs
+const RANGE_V2_SHELF_MIN_TOUCHES = 3;     // a band needs this many lows to count as a shelf
+const RANGE_V2_FORMING_MIN_BARS  = 6;     // below this a still-open box is noise, not a watch
+const RANGE_V2_MIN_BARS          = 12;    // contained candles required to freeze
+const RANGE_V2_MAX_BARS          = 60;    // window longer than this is not a range
+const RANGE_V2_MIN_WIDTH         = 0.03;  // structural box must be >= 3% wide
+const RANGE_V2_MAX_WIDTH         = 0.18;  // structural box must be <= 18% wide
+const RANGE_V2_DEV_THRESHOLD     = 0.015; // 1.5%+ beyond VAH/VAL counts as leaving the area
+const RANGE_V2_DEV_MAX_BARS      = 60;    // give up on the reclaim after this many candles
+const RANGE_V2_MIN_QUALITY       = 65;    // 0-100 composite floor, separate from v1's
+const RANGE_V2_ENABLED_TFS       = new Set(["SIX_HOUR", "ONE_HOUR", "THIRTY_MINUTE"]);
+
+function v2Median(values) {
+  const s = values.slice().sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+// Plain mean bar range, not Wilder's ATR: the catalyst screen compares a move
+// against "this token's own recent average candle range", which is this quantity.
+function v2Atr(highs, lows, endIdx, period) {
+  if(period <= 0 || endIdx < 0) return 0;
+  const start = Math.max(0, endIdx - period + 1);
+  let sum = 0, n = 0;
+  for(let i = start; i <= endIdx; i++){ sum += (highs[i] - lows[i]); n++; }
+  return n ? sum / n : 0;
+}
+
+function v2AvgVolume(volumes, endIdx, period) {
+  if(period <= 0 || endIdx < 0) return 0;
+  const start = Math.max(0, endIdx - period + 1);
+  let sum = 0, n = 0;
+  for(let i = start; i <= endIdx; i++){ sum += (volumes[i] || 0); n++; }
+  return n ? sum / n : 0;
+}
+
+// Was this anchor reached by a real impulsive move? Looks back up to
+// RANGE_V2_CATALYST_MAX_BARS for a leg that clears all three bars at once:
+// absolute percentage, size relative to the instrument's own volatility, and
+// volume conviction. A leg clearing only the flat percentage is exactly the
+// thin-wick false positive the three-bar test exists to reject.
+function v2CatalystInfo(highs, lows, volumes, index, direction) {
+  if(index <= 0) return null;
+  const baselineEnd = Math.max(0, index - 1);
+  const baseAtr = v2Atr(highs, lows, baselineEnd, RANGE_V2_BASELINE_LOOKBACK);
+  const baseVol = v2AvgVolume(volumes, baselineEnd, RANGE_V2_BASELINE_LOOKBACK);
+  const maxLb = Math.min(RANGE_V2_CATALYST_MAX_BARS, index);
+
+  for(let lb = 1; lb <= maxLb; lb++){
+    const s = index - lb;
+    const move = direction === 'from_high' ? (highs[index] - lows[s]) : (highs[s] - lows[index]);
+    const base = direction === 'from_high' ? lows[s] : lows[index];
+    if(!(base > 0) || !(move > 0)) continue;
+
+    let legVol = 0;
+    for(let k = s; k <= index; k++) legVol += (volumes[k] || 0);
+    legVol /= (lb + 1);
+
+    const movePct = move / base;
+    const pctOk = movePct >= RANGE_V2_CATALYST_MIN_PCT;
+    const atrOk = baseAtr <= 0 || move >= RANGE_V2_CATALYST_ATR_MULT * baseAtr;
+    const volOk = baseVol <= 0 || legVol >= RANGE_V2_CATALYST_VOL_MULT * baseVol;
+    if(pctOk && atrOk && volOk){
+      const atrRequiredPct = baseAtr > 0 ? (RANGE_V2_CATALYST_ATR_MULT * baseAtr) / base : 0;
+      return {
+        movePct,
+        requiredPct: Math.max(RANGE_V2_CATALYST_MIN_PCT, atrRequiredPct),
+        legVol, baseVol, bars: lb,
+      };
+    }
+  }
+  return null;
+}
+
+// The opposite boundary: the band where candle extremes CLUSTER after the anchor.
+// Explicitly NOT the single lowest wick, which one spike bar would otherwise define
+// — and that boundary decides where the break is, so a spike would corrupt the whole
+// window. Scouting is bounded to RANGE_V2_SHELF_SCOUT_BARS so candles from after a
+// break cannot contaminate the shelf.
+function findConsolidationShelf(highs, lows, closes, p1, direction) {
+  const scoutEnd = Math.min(closes.length - 1, p1 + RANGE_V2_SHELF_SCOUT_BARS);
+  if(scoutEnd <= p1) return null;
+
+  const extremes = [];
+  for(let i = p1 + 1; i <= scoutEnd; i++) extremes.push(direction === 'from_high' ? lows[i] : highs[i]);
+  if(!extremes.length) return null;
+
+  let tolerance = RANGE_V2_SHELF_TOL_ATR * v2Atr(highs, lows, p1, RANGE_V2_BASELINE_LOOKBACK);
+  if(!(tolerance > 0)){
+    // Degenerate/flat series: fall back to a fraction of the scouted spread.
+    const spread = Math.max(...extremes) - Math.min(...extremes);
+    tolerance = spread > 0 ? spread * 0.1 : 0;
+  }
+  if(!(tolerance > 0)) return v2Median(extremes);
+
+  const bands = new Map();
+  const origin = Math.min(...extremes);
+  for(const v of extremes){
+    const key = Math.floor((v - origin) / tolerance);
+    if(!bands.has(key)) bands.set(key, []);
+    bands.get(key).push(v);
+  }
+
+  // Densest band wins. Ties resolve OUTWARD (the lower band when anchored from a
+  // high) so the provisional range is never truncated early.
+  let bestKey = null, bestVals = null;
+  for(const [key, values] of bands){
+    if(bestVals === null){ bestKey = key; bestVals = values; continue; }
+    if(values.length > bestVals.length){ bestKey = key; bestVals = values; continue; }
+    if(values.length === bestVals.length){
+      const better = direction === 'from_high' ? (key < bestKey) : (key > bestKey);
+      if(better){ bestKey = key; bestVals = values; }
+    }
+  }
+
+  if(bestVals.length < RANGE_V2_SHELF_MIN_TOUCHES){
+    // No genuine shelf formed — fall back to the extreme CLOSE, which is still
+    // spike-resistant because it ignores wicks entirely.
+    let acc = closes[p1 + 1];
+    for(let i = p1 + 1; i <= scoutEnd; i++){
+      acc = direction === 'from_high' ? Math.min(acc, closes[i]) : Math.max(acc, closes[i]);
+    }
+    return acc;
+  }
+  return v2Median(bestVals);
+}
+
+// Walk forward from the anchor while CLOSES stay inside the provisional bounds.
+// Returns status 'frozen' once an expansion has completed the window, 'forming'
+// while containment is still ongoing (a watch state — no profile can exist yet),
+// or null when the structure does not qualify at all.
+function discoverRangeWindow(highs, lows, closes, p1, direction) {
+  const n = closes.length;
+  if(!(p1 >= 0 && p1 < n)) return null;
+
+  const shelf = findConsolidationShelf(highs, lows, closes, p1, direction);
+  if(shelf === null || !isFinite(shelf)) return null;
+
+  const rangeHigh = direction === 'from_high' ? highs[p1] : shelf;
+  const rangeLow  = direction === 'from_high' ? shelf : lows[p1];
+  if(!(rangeLow > 0) || !(rangeHigh > rangeLow)) return null;
+
+  let expansionIndex = null, expansionSide = null, lastContained = p1;
+  const limit = Math.min(n - 1, p1 + RANGE_V2_MAX_BARS);
+  for(let i = p1 + 1; i <= limit; i++){
+    const c = closes[i];
+    if(c > rangeHigh){ expansionIndex = i; expansionSide = 'above'; break; }
+    if(c < rangeLow){ expansionIndex = i; expansionSide = 'below'; break; }
+    lastContained = i;
+  }
+
+  const containedBars = lastContained - p1 + 1;
+  const widthPct = (rangeHigh - rangeLow) / rangeLow;
+  if(!(widthPct >= RANGE_V2_MIN_WIDTH && widthPct <= RANGE_V2_MAX_WIDTH)) return null;
+
+  const base = { p1Index:p1, p2Index:lastContained, rangeHigh, rangeLow, shelf,
+                 containedBars, widthPct, direction };
+
+  if(expansionIndex === null){
+    // Still contained. Never a signal: there is nothing to freeze, so no value area
+    // exists and there is no line to trade against.
+    if(containedBars < RANGE_V2_FORMING_MIN_BARS) return null;
+    return Object.assign({ status:'forming', expansionIndex:null, expansionSide:null }, base);
+  }
+  if(containedBars < RANGE_V2_MIN_BARS || containedBars > RANGE_V2_MAX_BARS) return null;
+  return Object.assign({ status:'frozen', expansionIndex, expansionSide }, base);
+}
+
+// The signal. Price CLOSES beyond the frozen value area by >= threshold, then
+// CLOSES back inside it. Fires on the return — the trade is the reclaim. Scanning
+// starts at the expansion candle, so the move that ended the window is itself the
+// first candidate. Direction-symmetric: below VAL is a long-side reclaim, above VAH
+// a short-side one.
+function findDeviation(highs, lows, closes, win, area) {
+  if(win.expansionIndex === null) return null;
+  const start = win.expansionIndex;
+  const end = Math.min(closes.length - 1, start + RANGE_V2_DEV_MAX_BARS);
+
+  let exitIndex = null, side = null, extreme = 0, extremeIndex = 0;
+  for(let i = start; i <= end; i++){
+    const c = closes[i];
+    if(exitIndex === null){
+      const below = area.val > 0 && c <= area.val * (1 - RANGE_V2_DEV_THRESHOLD);
+      const above = area.vah > 0 && c >= area.vah * (1 + RANGE_V2_DEV_THRESHOLD);
+      if(below){ exitIndex = i; side = 'below'; extreme = lows[i]; extremeIndex = i; }
+      else if(above){ exitIndex = i; side = 'above'; extreme = highs[i]; extremeIndex = i; }
+      continue;
+    }
+    // Excursion under way: track how far it ran, then wait for the reclaim.
+    if(side === 'below' && lows[i] < extreme){ extreme = lows[i]; extremeIndex = i; }
+    if(side === 'above' && highs[i] > extreme){ extreme = highs[i]; extremeIndex = i; }
+    if(c >= area.val && c <= area.vah){
+      const ref = side === 'below' ? area.val : area.vah;
+      return {
+        exitIndex, exitClose: closes[exitIndex],
+        extremePrice: extreme, extremeIndex,
+        returnIndex: i, returnClose: c, side,
+        excursionPct: ref > 0 ? (side === 'below' ? (ref - extreme) / ref : (extreme - ref) / ref) : 0,
+      };
+    }
+  }
+  return null;
+}
+
+// Full swings inside the frozen window, counted the same way v1 counts them.
+function v2CountSwings(highs, lows, win, area) {
+  const span = area.vah - area.val;
+  const topZone = area.vah - span * 0.15;
+  const botZone = area.val + span * 0.15;
+  let swings = 0, lastZone = null;
+  for(let i = win.p1Index; i <= win.p2Index; i++){
+    if(highs[i] >= topZone && lastZone !== 'top'){ swings++; lastZone = 'top'; }
+    else if(lows[i] <= botZone && lastZone !== 'bot'){ swings++; lastZone = 'bot'; }
+  }
+  return swings;
+}
+
+// Same five components as v1, so the two engines' scores stay comparable. The one
+// difference is freshness, which measures distance from the EXPANSION rather than
+// from the anchor — for a frozen window that is what "how live is this setup" means.
+function v2Quality(cat, win, area, swings, lastIdx) {
+  const catalystStrength = Math.max(0, Math.min(100, 50 + (cat.movePct / cat.requiredPct - 1) * 50));
+  const volumeStrength = cat.baseVol > 0
+    ? Math.max(0, Math.min(100, 50 + (cat.legVol / (cat.baseVol * RANGE_V2_CATALYST_VOL_MULT) - 1) * 50))
+    : 50;
+  const boxSpan = win.rangeHigh - win.rangeLow;
+  const tightness = boxSpan > 0 ? 1 - (area.vah - area.val) / boxSpan : 0;
+  const tightnessScore = Math.max(0, Math.min(100, tightness * 100));
+  const age = lastIdx - win.expansionIndex;
+  const freshnessScore = Math.max(0, Math.min(100, 100 - (age / RANGE_V2_DEV_MAX_BARS) * 100));
+  const swingScore = Math.max(0, Math.min(100, (swings / (FULL_SWING_MIN * 4)) * 100));
+  return Math.round(
+    catalystStrength * 0.25 +
+    volumeStrength   * 0.25 +
+    tightnessScore   * 0.25 +
+    freshnessScore   * 0.15 +
+    swingScore       * 0.10
+  );
+}
+
+// Same signature and same return shape as detectRange, so every consumer in
+// index.html — the filter, the sort, the stat tile, the badge, the token panel and
+// the floating widget — works against either engine untouched. The extra `window`
+// and `deviation` fields make a setup self-describing: entry is the return close,
+// invalidation sits beyond the excursion extreme, targets are POC then the far edge.
+function detectRangeV2(closes, highs, lows, volumes, opens, tfKey) {
+  if(!RANGE_V2_ENABLED_TFS.has(tfKey)) return null;
+  if(!closes || closes.length < RANGE_V2_MIN_BARS + RANGE_V2_CATALYST_MAX_BARS + 5) return null;
+  if(!volumes || volumes.length !== closes.length) return null;
+  if(!highs || !lows || highs.length !== closes.length || lows.length !== closes.length) return null;
+
+  const lastIdx = closes.length - 1;
+  const frozen = [];
+  let forming = null;
+
+  for(const direction of ['from_high', 'from_low']){
+    const anchors = direction === 'from_high'
+      ? findSwingHighs(highs, RANGE_V2_SWING_WIN)
+      : findSwingLows(lows, RANGE_V2_SWING_WIN);
+    const seen = new Set();
+
+    for(const a of anchors){
+      const cat = v2CatalystInfo(highs, lows, volumes, a.idx, direction);
+      if(!cat) continue;
+      const win = discoverRangeWindow(highs, lows, closes, a.idx, direction);
+      if(!win) continue;
+
+      if(win.status === 'forming'){
+        // Keep only the most advanced forming box as the watch candidate.
+        if(!forming || win.p2Index > forming.win.p2Index) forming = { win, cat };
+        continue;
+      }
+      // Several nearby swing highs inside one impulse resolve to the same window.
+      const key = win.p2Index + ':' + direction;
+      if(seen.has(key)) continue;
+      seen.add(key);
+
+      if(lastIdx - win.expansionIndex > RANGE_V2_DEV_MAX_BARS) continue; // stale
+      const area = computeVolumeProfile(highs, lows, volumes, win.p1Index, win.p2Index);
+      if(!area) continue;
+      frozen.push({ win, cat, area });
+    }
+  }
+
+  if(!frozen.length){
+    if(!forming) return null;
+    const w = forming.win;
+    // A forming box has NO value area. Reporting one would be a lie, so the
+    // tradeable fields are explicitly null and the UI must handle that.
+    return {
+      engine: 'v2', state: 'forming',
+      rangeHigh: w.rangeHigh, rangeLow: w.rangeLow, rangePct: w.widthPct,
+      poc: null, vah: null, val: null, midpoint: null,
+      catalystDir: w.direction === 'from_high' ? 'up' : 'down',
+      catalystPct: (forming.cat.movePct * 100).toFixed(1),
+      swings: 0, candlesInRange: w.containedBars,
+      qualityScore: null, grade: null,
+      deviation: null,
+      window: { p1Index:w.p1Index, p2Index:w.p2Index, shelf:w.shelf,
+                expansionIndex:null, expansionSide:null, containedBars:w.containedBars },
+    };
+  }
+
+  // Prefer a completed reclaim; otherwise the most recently frozen structure.
+  frozen.sort((a, b) => b.win.p2Index - a.win.p2Index);
+  let best = frozen[0];
+  let bestDev = findDeviation(highs, lows, closes, best.win, best.area);
+  if(!bestDev){
+    for(const cand of frozen){
+      const dev = findDeviation(highs, lows, closes, cand.win, cand.area);
+      if(dev){ best = cand; bestDev = dev; break; }
+    }
+  }
+
+  const { win, cat, area } = best;
+  const swings = v2CountSwings(highs, lows, win, area);
+  const qualityScore = v2Quality(cat, win, area, swings, lastIdx);
+  if(qualityScore < RANGE_V2_MIN_QUALITY) return null;
+
+  const close = closes[lastIdx];
+  const span = area.vah - area.val;
+  let state;
+  if(bestDev){
+    // 'confirmed-up' is a reclaim from BELOW the value area (long side), matching v1.
+    state = bestDev.side === 'below' ? 'confirmed-up' : 'confirmed-down';
+  } else if(area.val > 0 && close <= area.val * (1 - RANGE_V2_DEV_THRESHOLD)){
+    state = 'dev-below';
+  } else if(area.vah > 0 && close >= area.vah * (1 + RANGE_V2_DEV_THRESHOLD)){
+    state = 'dev-above';
+  } else if(close >= area.vah - span * 0.15 && close <= area.vah){
+    state = 'near-top';
+  } else if(close <= area.val + span * 0.15 && close >= area.val){
+    state = 'near-bottom';
+  } else {
+    state = 'ranging';
+  }
+
+  const result = {
+    engine: 'v2', state,
+    rangeHigh: win.rangeHigh, rangeLow: win.rangeLow, rangePct: win.widthPct,
+    poc: area.poc, vah: area.vah, val: area.val, midpoint: (area.vah + area.val) / 2,
+    catalystDir: win.direction === 'from_high' ? 'up' : 'down',
+    catalystPct: (cat.movePct * 100).toFixed(1),
+    swings, candlesInRange: win.containedBars,
+    qualityScore, grade: qualityScore >= 80 ? 'A' : 'B',
+    deviation: bestDev,
+    window: { p1Index:win.p1Index, p2Index:win.p2Index, shelf:win.shelf,
+              expansionIndex:win.expansionIndex, expansionSide:win.expansionSide,
+              containedBars:win.containedBars },
+  };
+
+  if(state === 'dev-below') result.deviationPct = (((area.val - close) / area.val) * 100).toFixed(1);
+  if(state === 'dev-above') result.deviationPct = (((close - area.vah) / area.vah) * 100).toFixed(1);
+
+  if(bestDev){
+    result.entry = bestDev.returnClose;
+    result.invalidation = bestDev.side === 'below'
+      ? Math.min(bestDev.extremePrice, win.rangeLow)
+      : Math.max(bestDev.extremePrice, win.rangeHigh);
+    result.targets = bestDev.side === 'below' ? [area.poc, area.vah] : [area.poc, area.val];
+  }
+  return result;
+}
+
 // _driveFunnel is reset and read by index.html's scan loop. It is reassigned
 // wholesale on reset, so it is exposed through accessors rather than as a value
 // export — a copied reference would silently stop tracking after the first reset.
@@ -863,6 +1256,24 @@ function resetDriveFunnel() {
 function getDriveFunnel() { return _driveFunnel; }
 
 var DETECTOR_CONSTANTS = Object.freeze({
+  RANGE_V2_CATALYST_MIN_PCT: RANGE_V2_CATALYST_MIN_PCT,
+  RANGE_V2_CATALYST_MAX_BARS: RANGE_V2_CATALYST_MAX_BARS,
+  RANGE_V2_BASELINE_LOOKBACK: RANGE_V2_BASELINE_LOOKBACK,
+  RANGE_V2_CATALYST_ATR_MULT: RANGE_V2_CATALYST_ATR_MULT,
+  RANGE_V2_CATALYST_VOL_MULT: RANGE_V2_CATALYST_VOL_MULT,
+  RANGE_V2_SWING_WIN: RANGE_V2_SWING_WIN,
+  RANGE_V2_SHELF_SCOUT_BARS: RANGE_V2_SHELF_SCOUT_BARS,
+  RANGE_V2_SHELF_TOL_ATR: RANGE_V2_SHELF_TOL_ATR,
+  RANGE_V2_SHELF_MIN_TOUCHES: RANGE_V2_SHELF_MIN_TOUCHES,
+  RANGE_V2_FORMING_MIN_BARS: RANGE_V2_FORMING_MIN_BARS,
+  RANGE_V2_MIN_BARS: RANGE_V2_MIN_BARS,
+  RANGE_V2_MAX_BARS: RANGE_V2_MAX_BARS,
+  RANGE_V2_MIN_WIDTH: RANGE_V2_MIN_WIDTH,
+  RANGE_V2_MAX_WIDTH: RANGE_V2_MAX_WIDTH,
+  RANGE_V2_DEV_THRESHOLD: RANGE_V2_DEV_THRESHOLD,
+  RANGE_V2_DEV_MAX_BARS: RANGE_V2_DEV_MAX_BARS,
+  RANGE_V2_MIN_QUALITY: RANGE_V2_MIN_QUALITY,
+  RANGE_V2_ENABLED_TFS: RANGE_V2_ENABLED_TFS,
   BB_PERIOD: BB_PERIOD,
   BB_STDDEV: BB_STDDEV,
   BW_LOOKBACK: BW_LOOKBACK,
@@ -919,6 +1330,10 @@ return {
   checkMTFConfluence: checkMTFConfluence,
   computeVolumeProfile: computeVolumeProfile,
   detectRange: detectRange,
+  detectRangeV2: detectRangeV2,
+  findConsolidationShelf: findConsolidationShelf,
+  discoverRangeWindow: discoverRangeWindow,
+  findDeviation: findDeviation,
   // constants, exported individually as well so the global surface that existed
   // before the extraction is preserved exactly and no call site can break
   BB_PERIOD: BB_PERIOD,
@@ -953,6 +1368,24 @@ return {
   TREND_SLOPE_MIN: TREND_SLOPE_MIN,
   VALUE_AREA_PCT: VALUE_AREA_PCT,
   VP_BUCKETS: VP_BUCKETS,
+  RANGE_V2_CATALYST_MIN_PCT: RANGE_V2_CATALYST_MIN_PCT,
+  RANGE_V2_CATALYST_MAX_BARS: RANGE_V2_CATALYST_MAX_BARS,
+  RANGE_V2_BASELINE_LOOKBACK: RANGE_V2_BASELINE_LOOKBACK,
+  RANGE_V2_CATALYST_ATR_MULT: RANGE_V2_CATALYST_ATR_MULT,
+  RANGE_V2_CATALYST_VOL_MULT: RANGE_V2_CATALYST_VOL_MULT,
+  RANGE_V2_SWING_WIN: RANGE_V2_SWING_WIN,
+  RANGE_V2_SHELF_SCOUT_BARS: RANGE_V2_SHELF_SCOUT_BARS,
+  RANGE_V2_SHELF_TOL_ATR: RANGE_V2_SHELF_TOL_ATR,
+  RANGE_V2_SHELF_MIN_TOUCHES: RANGE_V2_SHELF_MIN_TOUCHES,
+  RANGE_V2_FORMING_MIN_BARS: RANGE_V2_FORMING_MIN_BARS,
+  RANGE_V2_MIN_BARS: RANGE_V2_MIN_BARS,
+  RANGE_V2_MAX_BARS: RANGE_V2_MAX_BARS,
+  RANGE_V2_MIN_WIDTH: RANGE_V2_MIN_WIDTH,
+  RANGE_V2_MAX_WIDTH: RANGE_V2_MAX_WIDTH,
+  RANGE_V2_DEV_THRESHOLD: RANGE_V2_DEV_THRESHOLD,
+  RANGE_V2_DEV_MAX_BARS: RANGE_V2_DEV_MAX_BARS,
+  RANGE_V2_MIN_QUALITY: RANGE_V2_MIN_QUALITY,
+  RANGE_V2_ENABLED_TFS: RANGE_V2_ENABLED_TFS,
   DETECTOR_CONSTANTS: DETECTOR_CONSTANTS,
   setLogger: setLogger,
   resetDriveFunnel: resetDriveFunnel,

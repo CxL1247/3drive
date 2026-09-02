@@ -342,12 +342,170 @@ function contractTests() {
   check('reset replaces the object seen by getDriveFunnel', D.getDriveFunnel().candidates === 0);
 }
 
+
+// ── detectRangeV2 (range_frvp_v2) ─────────────────────────────────────────────
+// Builds the shape from the author's diagram: quiet baseline, catalyst impulse,
+// oscillation inside a box, a candle that CLOSES below the box (the expansion that
+// freezes the profile), an excursion, then a reclaim back inside the value area.
+function buildV2(opts) {
+  const o = Object.assign({ tail: 0, reclaim: true, excursionBars: 1, spikeLow: false }, opts || {});
+  const c = [];
+  for (let i = 0; i < 60; i++) c.push(100 + Math.sin(i / 3) * 0.25);
+  const base = c[59];
+  for (let i = 0; i < 4; i++) c.push(base * (1 + 0.10 * (i + 1) / 4));
+  const top = c[c.length - 1];
+  const lo = top * 0.93;
+  for (let i = 0; i < 16; i++) c.push(lo + (top - lo) * (0.5 + 0.5 * Math.sin(i / 1.7)));
+  const boxEnd = c.length - 1;
+  for (let i = 0; i < o.excursionBars; i++) c.push(lo * (0.975 - i * 0.005));
+  if (o.reclaim) c.push(top * 0.975);
+  for (let i = 0; i < o.tail; i++) c.push(top * 0.98);
+
+  const h = c.map(x => x * 1.004);
+  const l = c.map(x => x * 0.996);
+  const v = c.map((_, i) => (i >= 60 && i < 64 ? 6000 : 1000));
+  const op = c.map((x, i) => (i === 0 ? x : c[i - 1]));
+  // A single deep wick inside the box. The shelf must ignore it; using the lowest
+  // wick as the boundary would move the box floor and change every downstream number.
+  if (o.spikeLow) l[boxEnd - 4] = lo * 0.90;
+  return { c, h, l, v, o: op, boxEnd };
+}
+const runV2 = (f, tf) => D.detectRangeV2(f.c, f.h, f.l, f.v, f.o, tf || 'ONE_HOUR');
+
+function rangeV2Tests() {
+  console.log('\ndetectRangeV2 — window discovery and freezing');
+  const base = buildV2();
+  const r = runV2(base);
+  check('a catalyst + contained box + expansion produces a frozen range', r !== null);
+  check('anchor sits on the catalyst top, not the impulse base', r.window.p1Index === 63);
+  check('P2 is the last contained candle', r.window.p2Index === base.boxEnd);
+  check('the expansion candle is the one after P2', r.window.expansionIndex === base.boxEnd + 1);
+  check('expansion side recorded', r.window.expansionSide === 'below');
+  check('contained bars meet the minimum', r.window.containedBars >= D.RANGE_V2_MIN_BARS);
+  check('VAL < POC < VAH', r.val < r.poc && r.poc < r.vah);
+  check('value area is tighter than the structural box', (r.vah - r.val) < (r.rangeHigh - r.rangeLow));
+
+  // The defining property, and the one v1 cannot satisfy by construction.
+  console.log('\ndetectRangeV2 — the profile is FIXED');
+  const later = runV2(buildV2({ tail: 10 }));
+  check('VAL unchanged after 10 further candles', later.val === r.val);
+  check('POC unchanged after 10 further candles', later.poc === r.poc);
+  check('VAH unchanged after 10 further candles', later.vah === r.vah);
+  check('the frozen window itself is unchanged',
+    later.window.p1Index === r.window.p1Index && later.window.p2Index === r.window.p2Index);
+
+  console.log('\ndetectRangeV2 — the shelf ignores spikes');
+  const spiked = runV2(buildV2({ spikeLow: true }));
+  // The property that matters: the wick must not define the WINDOW boundary, because
+  // that boundary decides where the break is and therefore what gets profiled.
+  check('a single deep wick does not move the box floor at all', spiked.rangeLow === r.rangeLow);
+  check('a single deep wick does not change the state', spiked.state === r.state);
+  // The value area does shift very slightly, and should: a real FRVP distributes each
+  // bar's volume across its own high-low, so the wick legitimately takes a thin slice
+  // and widens the profile's extent. What must not happen is a large move.
+  const shift = (a, b) => Math.abs(b - a) / a;
+  check('the value area moves by less than 0.5% despite the wick',
+    shift(r.val, spiked.val) < 0.005 && shift(r.vah, spiked.vah) < 0.005 && shift(r.poc, spiked.poc) < 0.005);
+  // The contrast with v1 is the whole point of the shelf: the same wick pushes v1's
+  // box past RANGE_MAX_WIDTH and the setup disappears completely.
+  const spikeFixture = buildV2({ spikeLow: true });
+  const v1Spiked = D.detectRange(spikeFixture.c, spikeFixture.h, spikeFixture.l,
+    spikeFixture.v, spikeFixture.o, 'ONE_HOUR');
+  check('v1 loses the setup entirely on the same wick', v1Spiked === null);
+
+  console.log('\ndetectRangeV2 — the deviation fires on the RETURN');
+  check('a completed round trip reports confirmed-up', r.state === 'confirmed-up');
+  check('deviation records the exit leg', r.deviation.exitIndex === base.boxEnd + 1);
+  check('deviation records the excursion extreme',
+    r.deviation.extremePrice <= r.deviation.exitClose);
+  check('deviation records the return leg', r.deviation.returnIndex > r.deviation.exitIndex);
+  check('the return closed back inside the value area',
+    r.deviation.returnClose >= r.val && r.deviation.returnClose <= r.vah);
+  check('excursion is reported as a positive distance', r.deviation.excursionPct > 0);
+
+  // Break without reclaim must NOT be reported as a completed trade.
+  const noReclaim = runV2(buildV2({ reclaim: false }));
+  check('a break with no reclaim is not confirmed',
+    noReclaim === null || noReclaim.state !== 'confirmed-up');
+  if (noReclaim) {
+    check('a break with no reclaim reports the excursion instead', noReclaim.state === 'dev-below');
+    check('no deviation object until the reclaim completes', noReclaim.deviation === null);
+  }
+
+  // v1's lookback is a single candle (closes[len-2]), so an excursion lasting
+  // several candles before reclaiming is structurally invisible to it.
+  const long = buildV2({ excursionBars: 4 });
+  const v2Long = runV2(long);
+  const v1Long = D.detectRange(long.c, long.h, long.l, long.v, long.o, 'ONE_HOUR');
+  check('v2 catches a multi-candle excursion', v2Long && v2Long.state === 'confirmed-up');
+  check('v1 does not report that round trip',
+    v1Long === null || (v1Long.state !== 'confirmed-up' && v1Long.state !== 'confirmed-down'));
+
+  console.log('\ndetectRangeV2 — a self-describing setup');
+  check('entry is the reclaim close', r.entry === r.deviation.returnClose);
+  check('invalidation sits at or beyond the excursion extreme',
+    r.invalidation <= r.deviation.extremePrice + 1e-9);
+  check('targets are POC then the far edge of the value area',
+    r.targets[0] === r.poc && r.targets[1] === r.vah);
+
+  console.log('\ndetectRangeV2 — the forming watch state');
+  // Cut the series before the expansion: containment is still ongoing, so no
+  // profile can exist. The UI depends on these being null rather than stale numbers.
+  const openBox = buildV2();
+  const cut = openBox.boxEnd + 1;
+  const forming = D.detectRangeV2(openBox.c.slice(0, cut), openBox.h.slice(0, cut),
+    openBox.l.slice(0, cut), openBox.v.slice(0, cut), openBox.o.slice(0, cut), 'ONE_HOUR');
+  check('a still-contained box reports forming', forming && forming.state === 'forming');
+  check('a forming box publishes NO value area',
+    forming.vah === null && forming.poc === null && forming.val === null);
+  check('a forming box publishes no quality or grade',
+    forming.qualityScore === null && forming.grade === null);
+  check('a forming box still reports its provisional bounds',
+    forming.rangeHigh > forming.rangeLow && forming.rangePct > 0);
+  check('a forming box has no deviation', forming.deviation === null);
+  check('a forming box has no frozen expansion', forming.window.expansionIndex === null);
+
+  console.log('\ndetectRangeV2 — guards');
+  check('timeframe outside the enabled set -> null', runV2(base, 'ONE_MINUTE') === null);
+  check('volume length mismatch -> null',
+    D.detectRangeV2(base.c, base.h, base.l, base.v.slice(0, 5), base.o, 'ONE_HOUR') === null);
+  check('missing volumes -> null', D.detectRangeV2(base.c, base.h, base.l, null, base.o, 'ONE_HOUR') === null);
+  check('high/low length mismatch -> null',
+    D.detectRangeV2(base.c, base.h.slice(0, 5), base.l, base.v, base.o, 'ONE_HOUR') === null);
+  check('insufficient history -> null',
+    D.detectRangeV2(base.c.slice(0, 10), base.h.slice(0, 10), base.l.slice(0, 10),
+      base.v.slice(0, 10), base.o.slice(0, 10), 'ONE_HOUR') === null);
+
+  let threw = null;
+  try {
+    const nan = buildV2();
+    nan.c[70] = NaN;
+    runV2(nan);
+    D.detectRangeV2(base.c, base.h, base.l, base.v, null, 'ONE_HOUR');
+  } catch (e) { threw = e; }
+  check('tolerates NaN and omitted opens without throwing', threw === null);
+
+  console.log('\ndetectRangeV2 — shape contract with v1');
+  // index.html reads these off token.rangeData regardless of engine. If v2 drops a
+  // field the filter, sort, badge and token panel break silently.
+  const shared = ['state', 'rangeHigh', 'rangeLow', 'rangePct', 'poc', 'vah', 'val',
+    'midpoint', 'catalystDir', 'catalystPct', 'swings', 'candlesInRange', 'qualityScore', 'grade'];
+  check('v2 exposes every field v1 consumers read', shared.every(k => k in r));
+  check('v2 reuses the v1 state vocabulary',
+    ['ranging', 'near-top', 'near-bottom', 'dev-above', 'dev-below',
+      'confirmed-up', 'confirmed-down', 'forming'].includes(r.state));
+  check('v2 tags itself so the UI can tell the engines apart', r.engine === 'v2');
+  check('v2 constants are separate from v1 constants',
+    'RANGE_V2_MIN_QUALITY' in D.DETECTOR_CONSTANTS && 'RANGE_MIN_QUALITY' in D.DETECTOR_CONSTANTS);
+}
+
 volumeProfileTests();
 rsiTests();
 emaTests();
 swingTests();
 bbTests();
 rangeTests();
+rangeV2Tests();
 fvgTests();
 adversarialTests();
 contractTests();
