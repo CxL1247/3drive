@@ -2904,7 +2904,15 @@ const STABLES = new Set([
 ]);
 
 // ── TF BUTTONS ──
-document.querySelectorAll('.tf-btn').forEach(btn => {
+// Scoped to [data-tf]. The .tf-btn class is also worn by PERP/SPOT and the Gainers
+// and RSI timeframe pickers, all of which manage their own active state through their
+// own onclick handlers. Attaching to those too meant every click wrote
+// activeTFs[undefined] and then toggled 'active' from that shared flip-flop, fighting
+// the real handler — so the market toggle ended up with neither button highlighted on
+// alternate clicks. Worse, that write creates a literal "undefined" key, and the scan
+// loop builds its timeframe list from Object.keys(activeTFs), so a timeframe that does
+// not exist was being fetched for every token on every cycle.
+document.querySelectorAll('.tf-btn[data-tf]').forEach(btn => {
   btn.addEventListener('click', () => {
     const tf = btn.dataset.tf;
     activeTFs[tf] = !activeTFs[tf];
