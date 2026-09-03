@@ -2024,6 +2024,9 @@ input.ctrl::placeholder { color: var(--text-3); }
   .range-badge.dev-below { color:#f0a800; border-color:#f0a800; background:rgba(240,168,0,0.10); }
   .range-badge.conf-up   { color:#4ade80; border-color:#4ade80; background:rgba(74,222,128,0.10); }
   .range-badge.conf-down { color:#f87171; border-color:#f87171; background:rgba(248,113,113,0.10); }
+  /* Forming: a box that is still contained. Deliberately dimmed and dashed — there is
+     no frozen profile behind it yet, so it must never read as a tradeable signal. */
+  .range-badge.forming   { color:#64748b; border-color:#64748b; border-style:dashed; background:transparent; }
   .range-grade {
     display:inline-flex; align-items:center; justify-content:center;
     min-width:14px; height:14px; padding:0 3px; border-radius:3px;
@@ -2308,6 +2311,10 @@ input.ctrl::placeholder { color: var(--text-3); }
     <div class="tf-group" role="group" aria-label="Data market: perpetual futures or spot">
       <button class="tf-btn" id="marketBtnPerp" onclick="setDataMarket('perp')" aria-pressed="true">PERP</button>
       <button class="tf-btn" id="marketBtnSpot" onclick="setDataMarket('spot')" aria-pressed="false">SPOT</button>
+    </div>
+    <div class="tf-group" role="group" aria-label="Range engine: fixed-range volume profile or legacy">
+      <button class="tf-btn" id="rangeBtnV2" onclick="setRangeEngine('v2')" title="Fixed Range Volume Profile: the profile is frozen at the pre-expansion candle and deviations fire on the reclaim" aria-pressed="true">FRVP</button>
+      <button class="tf-btn" id="rangeBtnV1" onclick="setRangeEngine('v1')" title="Legacy range: profiles from the anchor to the current candle, recomputed every scan" aria-pressed="false">V1</button>
     </div>
     <div class="more-menu">
       <button class="more-toggle" id="moreToggle" onclick="toggleMoreMenu()" title="More" aria-label="More options" aria-haspopup="true" aria-expanded="false">⋯</button>
@@ -2821,6 +2828,7 @@ input.ctrl::placeholder { color: var(--text-3); }
   <span>3Drive Scanner · candle data via KuCoin · OKX · Bybit · rankings via CoinGecko</span>
   <span>3-pivot harmonic divergence · rsi period 14 · bb period 20 · bb squeeze = tightest in 125 bars · fvg scanned on 4H + 1H · for informational use only</span>
 </div>
+<script src="src/detectors.js"></script>
 <script>
 // ── STATE ──
 let tokenData = [];
@@ -2893,8 +2901,6 @@ let obScanning = false;
 const CONF_RSI_EXTREME  = 30;   // matches the 30/70 hot/cold zone used everywhere else in the app
 const CONF_OB_IMBALANCE = 0.50; // 50%+ imbalance = real, not marginal, pressure
 const CONF_SR_TOLERANCE = 0.015;// within 1.5% of a support/resistance zone counts as "at" it
-const BB_PERIOD  = 20;
-const BB_STDDEV  = 2;
 
 const STABLES = new Set([
   'USDT','USDC','BUSD','DAI','TUSD','USDP','FDUSD','USDD','FRAX','LUSD','SUSD',
@@ -2905,7 +2911,15 @@ const STABLES = new Set([
 ]);
 
 // ── TF BUTTONS ──
-document.querySelectorAll('.tf-btn').forEach(btn => {
+// Scoped to [data-tf]. The .tf-btn class is also worn by PERP/SPOT and the Gainers
+// and RSI timeframe pickers, all of which manage their own active state through their
+// own onclick handlers. Attaching to those too meant every click wrote
+// activeTFs[undefined] and then toggled 'active' from that shared flip-flop, fighting
+// the real handler — so the market toggle ended up with neither button highlighted on
+// alternate clicks. Worse, that write creates a literal "undefined" key, and the scan
+// loop builds its timeframe list from Object.keys(activeTFs), so a timeframe that does
+// not exist was being fetched for every token on every cycle.
+document.querySelectorAll('.tf-btn[data-tf]').forEach(btn => {
   btn.addEventListener('click', () => {
     const tf = btn.dataset.tf;
     activeTFs[tf] = !activeTFs[tf];
@@ -2922,6 +2936,8 @@ function log(msg, type='') {
   p.appendChild(d);
   p.scrollTop = p.scrollHeight;
 }
+// Hand the detectors the real UI logger; they no-op without it.
+setLogger(log);
 function toggleLog() {
   const p = document.getElementById('logPanel');
   const t = document.querySelector('.log-toggle');
@@ -2952,28 +2968,6 @@ function filterFromStat(f) {
 
 
 
-// ── RSI ──
-function calcRSI(closes, period=14) {
-  if(closes.length < period+1) return [];
-  let gains=[], losses=[];
-  for(let i=1;i<closes.length;i++){
-    const d=closes[i]-closes[i-1];
-    gains.push(d>0?d:0);
-    losses.push(d<0?Math.abs(d):0);
-  }
-  let avgG=gains.slice(0,period).reduce((a,b)=>a+b)/period;
-  let avgL=losses.slice(0,period).reduce((a,b)=>a+b)/period;
-
-  // Pad front with nulls so rsi[i] aligns with closes[i]
-  const rsi = new Array(period + 1).fill(null);
-
-  for(let i=period;i<gains.length;i++){
-    avgG=(avgG*(period-1)+gains[i])/period;
-    avgL=(avgL*(period-1)+losses[i])/period;
-    rsi.push(avgL===0?100:100-(100/(1+avgG/avgL)));
-  }
-  return rsi;
-}
 
 // ── BOLLINGER BAND SQUEEZE ──
 // Returns: { squeezing: bool, strength: 0-100, duration: number, width: number, percentile: number }
@@ -2996,33 +2990,6 @@ function calcRSI(closes, period=14) {
 //    Eliminates momentary pinches caused by low-volatility single candles.
 
 
-// BB Squeeze: John Bollinger BandWidth method
-// BandWidth = (Upper - Lower) / Middle × 100
-// Squeeze = BandWidth at its LOWEST point in last 125 candles
-// This exactly matches what you see visually on TradingView
-const BW_LOOKBACK = 125;  // 125-bar lookback — original
-
-function calcBBSqueeze(closes, period=BB_PERIOD, mult=BB_STDDEV) {
-  if(closes.length < period + BW_LOOKBACK) {
-    return { squeezing:false, strength:0, bw:0, bwMin:0 };
-  }
-  const bwArr = [];
-  for(let i = period-1; i < closes.length; i++){
-    const sl = closes.slice(i-period+1, i+1);
-    const mean = sl.reduce((a,b)=>a+b,0)/period;
-    const sd = Math.sqrt(sl.reduce((a,b)=>a+(b-mean)**2,0)/period);
-    bwArr.push(mean>0 ? ((mean+mult*sd)-(mean-mult*sd))/mean*100 : 0);
-  }
-  const n = bwArr.length;
-  const currentBW = bwArr[n-1];
-  const window = bwArr.slice(-BW_LOOKBACK);
-  const bwMin = Math.min(...window);
-  const bwAvg = window.reduce((a,b)=>a+b,0)/window.length;
-  // Squeeze = current BW is at or near the 125-bar minimum (bottom 20th percentile)
-  const strength = bwAvg>0 ? Math.round(Math.max(0,Math.min(100,(1-currentBW/bwAvg)*100))) : 0;
-  const squeezing = currentBW <= bwMin + 0.001 && strength >= 70;
-  return { squeezing, strength, bw:Math.round(currentBW*100)/100, bwMin:Math.round(bwMin*100)/100 };
-}
 
 function getSqueezeBadgeHTML(token) {
   const squeezes = Object.entries(token.squeeze || {})
@@ -3042,343 +3009,18 @@ function getSqueezeBadgeHTML(token) {
     <span class="sq-label">BW ${sq.bw??0} · ${sq.strength}%${srHit?' · <span style="color:#f06030">'+srHit+'</span>':''}</span>
   </div>`;
 }
-function findSwingHighs(arr, win=3) {
-  const highs = [];
-  for(let i=win; i<arr.length-win; i++){
-    let isH = true;
-    for(let j=i-win; j<=i+win; j++){
-      if(j !== i && arr[j] >= arr[i]){ isH = false; break; }
-    }
-    if(isH) highs.push({ idx:i, val:arr[i] });
-  }
-  return highs;
-}
-
-function findSwingLows(arr, win=3) {
-  const lows = [];
-  for(let i=win; i<arr.length-win; i++){
-    let isL = true;
-    for(let j=i-win; j<=i+win; j++){
-      if(j !== i && arr[j] <= arr[i]){ isL = false; break; }
-    }
-    if(isL) lows.push({ idx:i, val:arr[i] });
-  }
-  return lows;
-}
-
-// Keep findPivots for S/R detection (uses both highs+lows)
-function findPivots(arr, win=3) {
-  return { highs: findSwingHighs(arr, win), lows: findSwingLows(arr, win) };
-}
-
-// Finds the actual correction (pullback) extreme between two drive points —
-// needed to verify real Fibonacci extension/retracement proportions between drives,
-// not just "some pullback happened." This is what actually distinguishes a genuine
-// "Three Drives" harmonic pattern from a head-and-shoulders-like shape: in a real
-// 3-Drives, each drive is a ~1.13–1.618 extension of the prior correction, and each
-// correction is a ~0.55–0.9 retracement of the prior drive. A H&S-style "huge middle
-// spike, tiny final push" shape fails these ratios even though it still has 3 ascending
-// (or descending) peaks.
-function findExtremeIdx(arr, from, to, findMin) {
-  let bestIdx = from, bestVal = arr[from];
-  for (let i = from + 1; i <= to; i++) {
-    if (findMin ? arr[i] < bestVal : arr[i] > bestVal) { bestVal = arr[i]; bestIdx = i; }
-  }
-  return { idx: bestIdx, val: bestVal };
-}
-const FIB_EXT_MIN  = 1.13, FIB_EXT_MAX  = 1.85; // each drive vs the prior correction
-const FIB_RETR_MIN = 0.55, FIB_RETR_MAX = 0.90; // each correction vs the prior drive
-
-// ── 4H TREND CONTEXT ──
-// A lower-timeframe reversal signal that fights a strong 4H trend has a well-documented
-// tendency to fail more often — more capital and momentum sit on the trend side. This gives
-// each 1H/30M signal a simple "does this agree with or fight the higher timeframe" read.
-function calcEMA(closes, period) {
-  if (!closes || closes.length < period) return [];
-  const k = 2 / (period + 1);
-  const ema = [closes[0]];
-  for (let i = 1; i < closes.length; i++) ema.push(closes[i] * k + ema[i-1] * (1-k));
-  return ema;
-}
-const TREND_EMA_PERIOD = 50;
-const TREND_SLOPE_MIN  = 0.004; // ~0.4% EMA move over the lookback to call it a real trend, not noise
-function get4HTrend(closes4h) {
-  if (!closes4h || closes4h.length < TREND_EMA_PERIOD + 10) return 'neutral';
-  const ema = calcEMA(closes4h, TREND_EMA_PERIOD);
-  const now  = ema[ema.length - 1];
-  const past = ema[Math.max(0, ema.length - 11)]; // ~10 candles (40h) ago
-  const slope = (now - past) / past;
-  const price = closes4h[closes4h.length - 1];
-  if (slope > TREND_SLOPE_MIN && price > now) return 'up';
-  if (slope < -TREND_SLOPE_MIN && price < now) return 'down';
-  return 'neutral';
-}
-
-// TF-aware pivot window and recency gate
-const TF_PIVOT_WIN  = {'SIX_HOUR':5,'ONE_HOUR':4,'THIRTY_MINUTE':3};
-const TF_RECENCY    = {'SIX_HOUR':8,'ONE_HOUR':12,'THIRTY_MINUTE':18};
-// Max candles allowed between drives — was a flat 20 for every timeframe, which meant "20
-// candles" silently meant wildly different real-world durations (10h on 30M vs ~3.3 days on
-// 4H). A real PUMPUSDT 4H pattern needed 42 and 30 candles between its drives (5-7 real days)
-// and was silently rejected before ever reaching the Fibonacci or RSI checks — confirmed by
-// hand-computing the actual candle gaps against the old flat limit. Scaled per timeframe now,
-// same pattern as TF_PIVOT_WIN/TF_RECENCY above.
-const TF_MAX_GAP    = {'SIX_HOUR':50,'ONE_HOUR':30,'THIRTY_MINUTE':20};
-
-function checkVolumeSpike(volumes,multiplier=1.5,lookback=20,atIdx=null){
-  if(!volumes||volumes.length<lookback+1) return false;
-  // Default to the latest candle if no specific index given (e.g. for live/no-pattern checks)
-  const idx = atIdx!=null ? atIdx : volumes.length-1;
-  if(idx < lookback) return false;
-  const recent=volumes.slice(idx-lookback, idx);
-  const avg=recent.reduce((a,b)=>a+b,0)/recent.length;
-  return avg>0&&volumes[idx]>=avg*multiplier;
-}
-
-// Thin/low volume — the mirror of checkVolumeSpike. A signal formed on unusually quiet volume
-// is thinner evidence: fewer real participants agreeing with the move, easier for a small
-// order to swing price, similar in spirit to the weekend liquidity flag.
-function checkVolumeDrought(volumes,threshold=0.5,lookback=20,atIdx=null){
-  if(!volumes||volumes.length<lookback+1) return false;
-  const idx = atIdx!=null ? atIdx : volumes.length-1;
-  if(idx < lookback) return false;
-  const recent=volumes.slice(idx-lookback, idx);
-  const avg=recent.reduce((a,b)=>a+b,0)/recent.length;
-  return avg>0&&volumes[idx]<=avg*threshold;
-}
-
-// Volume/price mismatch — a HEURISTIC proxy for possible wash-trading or artificial volume,
-// not a confirmed detection. Real wash-trading detection needs order-book or wallet-level
-// data this scanner doesn't have access to. What IS detectable from candles alone: volume
-// that's elevated while price barely moved is the classic signature — genuine organic
-// buying/selling tends to actually move price, so a big-volume, small-range candle is worth
-// flagging as questionable rather than trusting at face value.
-function checkVolumeMismatch(closes,highs,lows,volumes,multiplier=1.5,lookback=20,atIdx=null){
-  if(!volumes||volumes.length<lookback+1||!highs||!lows||!closes) return false;
-  const idx = atIdx!=null ? atIdx : volumes.length-1;
-  if(idx < lookback) return false;
-  const recentVol = volumes.slice(idx-lookback, idx);
-  const avgVol = recentVol.reduce((a,b)=>a+b,0)/recentVol.length;
-  if(!(avgVol>0) || volumes[idx] < avgVol*multiplier) return false; // only relevant when volume IS elevated
-
-  // Typical range-per-volume for recent candles, vs this candle's range-per-volume
-  const rangePct = i => closes[i]>0 ? (highs[i]-lows[i])/closes[i] : 0;
-  const recentRangePerVol = recentVol.map((v,j) => v>0 ? rangePct(idx-lookback+j)/v : 0).filter(x=>x>0);
-  if(!recentRangePerVol.length) return false;
-  const avgRangePerVol = recentRangePerVol.reduce((a,b)=>a+b,0)/recentRangePerVol.length;
-  const thisRangePerVol = volumes[idx]>0 ? rangePct(idx)/volumes[idx] : 0;
-
-  // This candle moved the price far less per unit of volume than is typical — elevated
-  // volume, disproportionately small range
-  return avgRangePerVol>0 && thisRangePerVol <= avgRangePerVol*0.35;
-}
-
-// Single classification, independent of any 3-Drive pattern — for "what's this token's
-// volume doing right now" on its own terms, not just when a signal happens to form there.
-// Reuses the exact same thresholds as checkVolumeDrought/checkVolumeMismatch above, just
-// exposed as a standalone status rather than a boolean tied to a signal.
-function classifyVolumeStatus(closes,highs,lows,volumes,lookback=20,atIdx=null){
-  if(!volumes||volumes.length<lookback+1||!closes) return null;
-  const idx = atIdx!=null ? atIdx : volumes.length-1;
-  if(idx < lookback) return null;
-  const recent = volumes.slice(idx-lookback, idx);
-  const avg = recent.reduce((a,b)=>a+b,0)/recent.length;
-  if(!(avg>0)) return null;
-  const ratio = volumes[idx]/avg;
-
-  if(ratio <= 0.5) return 'low';
-  if(ratio >= 1.5){
-    if(checkVolumeMismatch(closes,highs,lows,volumes,1.5,lookback,idx)) return 'mismatch';
-    return 'elevated'; // genuinely active, price moved proportionally — not suspicious
-  }
-  return 'normal';
-}
 
 
 
-function timeSym(p1, p2, p3){
-  const gap1 = p2.idx - p1.idx;
-  const gap2 = p3.idx - p2.idx;
-  if(gap1 <= 0 || gap2 <= 0) return 0;
-  const ratio = Math.min(gap1,gap2) / Math.max(gap1,gap2);
-  return Math.round(ratio * 10);
-}
 
-function detect3Drive(closes, highs, lows, rsiArr, tfKey='ONE_HOUR', times=null) {
-  if(!closes || closes.length < 50 || !rsiArr || rsiArr.length < 30) return { signal:'none', confidence:0 };
 
-  const win    = TF_PIVOT_WIN[tfKey] || 3;
-  const maxAge = TF_RECENCY[tfKey]   || 14;
-  const MIN_GAP     = 8;   // min candles between drives — 4 was a no-op: with win=3, the pivot
-                            // algorithm can't produce swing highs less than 4 apart anyway, so
-                            // that floor never actually rejected anything. 8 is a real minimum.
-  const MAX_GAP     = TF_MAX_GAP[tfKey] || 20;  // max candles between drives — now timeframe-aware
-  const MIN_PULLBACK = 0.008; // 0.8% visible pullback between drives
 
-  // ── BEARISH: 3 swing highs (HH,HH,HH) + RSI lower at each high (LH,LH,LH) ──
-  const priceHighs = findSwingHighs(highs || closes, win);
-  if(priceHighs.length >= 3){
-    const candidates = priceHighs.slice(-9);
-    for(let i = 0; i <= candidates.length - 3; i++){
-      const [d1, d2, d3] = [candidates[i], candidates[i+1], candidates[i+2]];
 
-      if(closes.length - 1 - d3.idx > maxAge) continue;
 
-      // Strictly higher highs — check this FIRST so we can count/log genuine 3-point
-      // structures that get rejected purely on spacing, which previously vanished with no
-      // diagnostic trace at all (rejected before the funnel counter or near-miss log ever saw them).
-      if(d2.val <= d1.val) continue;
-      if(d3.val <= d2.val) continue;
 
-      _driveFunnel.rawTriples = (_driveFunnel.rawTriples||0) + 1;
 
-      // Spacing — now timeframe-aware (see TF_MAX_GAP above)
-      const gap12 = d2.idx - d1.idx;
-      const gap23 = d3.idx - d2.idx;
-      if(gap12 < MIN_GAP || gap12 > MAX_GAP || gap23 < MIN_GAP || gap23 > MAX_GAP){
-        log(`Near-miss [${tfKey}]: real 3-point ascending structure, rejected on spacing — gap1=${gap12} candles, gap2=${gap23} candles (allowed ${MIN_GAP}-${MAX_GAP})`, 'warn');
-        continue;
-      }
 
-      _driveFunnel.candidates++; // a real 3-point candidate worth evaluating further
 
-      // Visible pullback between drives (absolute floor, to avoid noise-level corrections)
-      const priceLowSlice = (lows || closes);
-      const pb12 = (d2.val - Math.min(...priceLowSlice.slice(d1.idx, d2.idx+1))) / d2.val;
-      const pb23 = (d3.val - Math.min(...priceLowSlice.slice(d2.idx, d3.idx+1))) / d3.val;
-      if(pb12 < MIN_PULLBACK) continue;
-      if(pb23 < MIN_PULLBACK) continue;
-
-      _driveFunnel.passedGapPullback++;
-
-      // Fibonacci proportionality — the actual defining feature of a real "Three Drives"
-      // pattern, and what rules out head-and-shoulders-like shapes (huge middle spike,
-      // tiny final push) that would otherwise pass the simple "each high is higher" check above.
-      const c1 = findExtremeIdx(priceLowSlice, d1.idx, d2.idx, true);
-      const c2 = findExtremeIdx(priceLowSlice, d2.idx, d3.idx, true);
-      const corr1  = d1.val - c1.val;
-      const drive2 = d2.val - c1.val;
-      const corr2  = d2.val - c2.val;
-      const drive3 = d3.val - c2.val;
-      if(corr1 <= 0 || corr2 <= 0 || drive2 <= 0 || drive3 <= 0) continue;
-      const ext1  = drive2 / corr1;  // Drive 2 should extend Correction 1
-      const retr2 = corr2 / drive2;  // Correction 2 should retrace Drive 2
-      const ext2  = drive3 / corr2;  // Drive 3 should extend Correction 2
-      if(ext1 < FIB_EXT_MIN || ext1 > FIB_EXT_MAX) continue;
-      if(retr2 < FIB_RETR_MIN || retr2 > FIB_RETR_MAX) continue;
-      if(ext2 < FIB_EXT_MIN || ext2 > FIB_EXT_MAX) continue;
-
-      _driveFunnel.passedFib++;
-
-      // RSI at EXACT price pivot candles — strictly lower at each high
-      const rsi1 = rsiArr[d1.idx];
-      const rsi2 = rsiArr[d2.idx];
-      const rsi3 = rsiArr[d3.idx];
-      if(!rsi1 || !rsi2 || !rsi3) continue;
-      if(rsi2 >= rsi1 || rsi3 >= rsi2 || (rsi1 - rsi3) < 7 || rsi1 < 55){
-        // Passed the hard part (real structure + real Fibonacci proportions) but died on RSI —
-        // log exactly which condition failed, since this is rare enough not to spam the console
-        // and precious enough (a structurally real 3-Drives) to know why it didn't qualify.
-        const reasons = [];
-        if(rsi2 >= rsi1) reasons.push('RSI not lower at drive 2');
-        if(rsi3 >= rsi2) reasons.push('RSI not lower at drive 3');
-        if((rsi1 - rsi3) < 7) reasons.push(`divergence only ${(rsi1-rsi3).toFixed(1)}pts (need 7+)`);
-        if(rsi1 < 55) reasons.push(`drive 1 RSI only ${rsi1.toFixed(1)} (need 55+)`);
-        log(`Near-miss [${tfKey}]: real 3-Drives structure, RSI ${rsi1.toFixed(1)}→${rsi2.toFixed(1)}→${rsi3.toFixed(1)} — rejected: ${reasons.join(', ')}`, 'warn');
-        continue;
-      }
-
-      _driveFunnel.passedRSI++;
-
-      const priceMove = (d3.val - d1.val) / d1.val * 100;
-      const rsiDiv    = rsi1 - rsi3;
-      const symScore  = timeSym(d1, d2, d3);
-      const conf      = Math.min(95, 40 + Math.min(rsiDiv*2.5,30) + Math.min(priceMove*3,20) + symScore);
-
-      return { signal:'bearish', confidence:Math.round(conf), detectedAt:Date.now(),
-               formationIdx: d3.idx, formationPrice: closes[d3.idx], formationTime: (times && times[d3.idx]) || Date.now(),
-               drives:[d1,d2,d3], rsiAtDrives:[rsi1,rsi2,rsi3] };
-    }
-  }
-
-  // ── BULLISH: 3 swing lows (LL,LL,LL) + RSI higher at each low (HL,HL,HL) ──
-  const priceLows = findSwingLows(lows || closes, win);
-  if(priceLows.length >= 3){
-    const candidates = priceLows.slice(-9);
-    for(let i = 0; i <= candidates.length - 3; i++){
-      const [d1, d2, d3] = [candidates[i], candidates[i+1], candidates[i+2]];
-
-      if(closes.length - 1 - d3.idx > maxAge) continue;
-
-      const gap12 = d2.idx - d1.idx;
-      const gap23 = d3.idx - d2.idx;
-      if(gap12 < MIN_GAP || gap12 > MAX_GAP) continue;
-      if(gap23 < MIN_GAP || gap23 > MAX_GAP) continue;
-
-      // Strictly lower lows
-      if(d2.val >= d1.val) continue;
-      if(d3.val >= d2.val) continue;
-
-      _driveFunnel.candidates++;
-
-      // Visible bounce between drives (absolute floor, to avoid noise-level corrections)
-      const priceHighSlice = (highs || closes);
-      const bn12 = (Math.max(...priceHighSlice.slice(d1.idx, d2.idx+1)) - d2.val) / d2.val;
-      const bn23 = (Math.max(...priceHighSlice.slice(d2.idx, d3.idx+1)) - d3.val) / d3.val;
-      if(bn12 < MIN_PULLBACK) continue;
-      if(bn23 < MIN_PULLBACK) continue;
-
-      _driveFunnel.passedGapPullback++;
-
-      // Fibonacci proportionality — same check as the bearish case, mirrored: each drive
-      // (down-leg) should be a ~1.13–1.618 extension of the prior bounce, each bounce a
-      // ~0.55–0.9 retracement of the prior drive. Rules out head-and-shoulders-like shapes.
-      const c1 = findExtremeIdx(priceHighSlice, d1.idx, d2.idx, false);
-      const c2 = findExtremeIdx(priceHighSlice, d2.idx, d3.idx, false);
-      const corr1  = c1.val - d1.val;
-      const drive2 = c1.val - d2.val;
-      const corr2  = c2.val - d2.val;
-      const drive3 = c2.val - d3.val;
-      if(corr1 <= 0 || corr2 <= 0 || drive2 <= 0 || drive3 <= 0) continue;
-      const ext1  = drive2 / corr1;  // Drive 2 should extend Correction 1
-      const retr2 = corr2 / drive2;  // Correction 2 should retrace Drive 2
-      const ext2  = drive3 / corr2;  // Drive 3 should extend Correction 2
-      if(ext1 < FIB_EXT_MIN || ext1 > FIB_EXT_MAX) continue;
-      if(retr2 < FIB_RETR_MIN || retr2 > FIB_RETR_MAX) continue;
-      if(ext2 < FIB_EXT_MIN || ext2 > FIB_EXT_MAX) continue;
-
-      _driveFunnel.passedFib++;
-
-      // RSI at EXACT pivot candles — strictly higher at each low
-      const rsi1 = rsiArr[d1.idx];
-      const rsi2 = rsiArr[d2.idx];
-      const rsi3 = rsiArr[d3.idx];
-      if(!rsi1 || !rsi2 || !rsi3) continue;
-      if(rsi2 <= rsi1 || rsi3 <= rsi2 || (rsi3 - rsi1) < 7 || rsi1 > 45){
-        const reasons = [];
-        if(rsi2 <= rsi1) reasons.push('RSI not higher at drive 2');
-        if(rsi3 <= rsi2) reasons.push('RSI not higher at drive 3');
-        if((rsi3 - rsi1) < 7) reasons.push(`divergence only ${(rsi3-rsi1).toFixed(1)}pts (need 7+)`);
-        if(rsi1 > 45) reasons.push(`drive 1 RSI only ${rsi1.toFixed(1)} (need ≤45)`);
-        log(`Near-miss [${tfKey}]: real 3-Drives structure, RSI ${rsi1.toFixed(1)}→${rsi2.toFixed(1)}→${rsi3.toFixed(1)} — rejected: ${reasons.join(', ')}`, 'warn');
-        continue;
-      }
-
-      _driveFunnel.passedRSI++;
-
-      const priceDrop = (d1.val - d3.val) / d1.val * 100;
-      const rsiDiv    = rsi3 - rsi1;
-      const symScore  = timeSym(d1, d2, d3);
-      const conf      = Math.min(95, 40 + Math.min(rsiDiv*2.5,30) + Math.min(priceDrop*3,20) + symScore);
-
-      return { signal:'bullish', confidence:Math.round(conf), detectedAt:Date.now(),
-               formationIdx: d3.idx, formationPrice: closes[d3.idx], formationTime: (times && times[d3.idx]) || Date.now(),
-               drives:[d1,d2,d3], rsiAtDrives:[rsi1,rsi2,rsi3] };
-    }
-  }
-
-  return { signal:'none', confidence:0 };
-}
 
 // ── FETCH HELPERS ──
 // All exchange calls go server-side via /.netlify/functions/proxy
@@ -3418,8 +3060,31 @@ async function binanceFetch(url, ms=10000) {
 // ── FETCH CANDLES ──
 // One call to your own server — server tries KuCoin → OKX → Binance → Bybit internally
 let _candleDiagDone = false;
-let _driveFunnel = { candidates:0, passedGapPullback:0, passedFib:0, passedRSI:0 };
 let dataMarket = localStorage.getItem('3drive_data_market') || 'perp'; // 'perp' or 'spot'
+// Which range engine the scanner uses. v2 (range_frvp_v2) is the default: it freezes
+// the volume profile at the pre-expansion candle so VAH/POC/VAL stop moving, and it
+// fires on the reclaim rather than the break. v1 remains available for comparison.
+let rangeEngine = localStorage.getItem('3drive_range_engine') || 'v2';
+
+function setRangeEngine(engine) {
+  if(engine === rangeEngine) return;
+  rangeEngine = engine;
+  try { localStorage.setItem('3drive_range_engine', rangeEngine); } catch(e){}
+  applyRangeEngineUI();
+  tokenData.forEach(t => { t.rangeData = null; });
+  log(`Range engine: ${rangeEngine === 'v2' ? 'FRVP (frozen profile)' : 'legacy v1'} — re-scan to apply`, 'warn');
+}
+
+function applyRangeEngineUI() {
+  const v2Btn = document.getElementById('rangeBtnV2');
+  const v1Btn = document.getElementById('rangeBtnV1');
+  if(!v2Btn || !v1Btn) return;
+  v2Btn.classList.toggle('active', rangeEngine === 'v2');
+  v1Btn.classList.toggle('active', rangeEngine === 'v1');
+  v2Btn.setAttribute('aria-pressed', rangeEngine === 'v2' ? 'true' : 'false');
+  v1Btn.setAttribute('aria-pressed', rangeEngine === 'v1' ? 'true' : 'false');
+}
+
 function setDataMarket(market) {
   if(market === dataMarket) return;
   dataMarket = market;
@@ -3438,8 +3103,78 @@ function applyDataMarketUI() {
   spotBtn.setAttribute('aria-pressed', dataMarket === 'spot' ? 'true' : 'false');
 }
 
+// ── Browser-direct exchange access ────────────────────────────────────────────
+// Binance and Bybit reject many cloud/serverless IP ranges, which is why the proxy's
+// four-way race almost always resolves to KuCoin or OKX — those two exchanges
+// contribute nothing in practice. The visitor's own IP is not blocked, and both send
+// permissive CORS on their public market-data endpoints, so the page can reach them
+// itself. That restores two sources and, because it runs before the proxy, also cuts
+// function invocations.
+//
+// Everything here is best-effort: any CORS, network, shape or listing failure simply
+// loses, and the proxy path runs exactly as it did before.
+const DIRECT_TF_MAP = {
+  SIX_HOUR:      { bin:'4h',  bybit:'240' },
+  ONE_HOUR:      { bin:'1h',  bybit:'60'  },
+  THIRTY_MINUTE: { bin:'30m', bybit:'30'  },
+  FIFTEEN_MINUTE:{ bin:'15m', bybit:'15'  },
+};
+const DIRECT_TIMEOUT_MS = 8000;
+
+// Both exchanges return [time, open, high, low, close, volume, …]; Bybit lists
+// newest-first. Mirrors the proxy's parsers so either path yields the same shape.
+function shapeDirectCandles(rows, newestFirst, source){
+  if(!Array.isArray(rows) || rows.length < 40) return null;
+  const r = newestFirst ? [...rows].reverse() : rows;
+  return {
+    closes:  r.map(x => +x[4]),
+    highs:   r.map(x => +x[2]),
+    lows:    r.map(x => +x[3]),
+    volumes: r.map(x => +x[5]),
+    times:   r.map(x => +x[0]),
+    source,
+  };
+}
+
+async function fetchCandlesDirect(symbol, tfKey) {
+  const tf = DIRECT_TF_MAP[tfKey];
+  if(!tf) return null;
+  const perp = dataMarket === 'perp';
+  const sym  = symbol + 'USDT';
+  const sources = [
+    { url: perp
+        ? `https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=${tf.bin}&limit=300`
+        : `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${tf.bin}&limit=300`,
+      parse: d => shapeDirectCandles(d, false, perp ? 'binance-perp·direct' : 'binance·direct') },
+    { url: `https://api.bybit.com/v5/market/kline?category=${perp ? 'linear' : 'spot'}&symbol=${sym}&interval=${tf.bybit}&limit=300`,
+      parse: d => shapeDirectCandles(d && d.result && d.result.list, true, perp ? 'bybit-perp·direct' : 'bybit·direct') },
+  ];
+
+  const attempt = async (src) => {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), DIRECT_TIMEOUT_MS);
+    try {
+      const res = await fetch(src.url, { signal: ctl.signal, cache: 'no-store' });
+      if(!res.ok) throw new Error('http ' + res.status);
+      const parsed = src.parse(await res.json());
+      if(!parsed) throw new Error('unusable payload');   // reject so the race moves on
+      return parsed;
+    } finally { clearTimeout(timer); }
+  };
+
+  try { return await Promise.any(sources.map(attempt)); }
+  catch(e) { return null; }   // every direct source failed — the proxy takes over
+}
+
 async function fetchCandles(productId, symbol, tfKey) {
   const diag = !_candleDiagDone;
+
+  const direct = await fetchCandlesDirect(symbol, tfKey);
+  if(direct){
+    if(diag){ _candleDiagDone=true; log(`Candle source: ${direct.source} (${dataMarket}) ✓`,'ok'); }
+    return direct;
+  }
+
   const r = await serverFetch({ action:'candles', symbol, tf:tfKey, market:dataMarket }, 25000);
   if(r.ok){
     const data = await r.json();
@@ -3705,7 +3440,7 @@ function renderTable(){
   if(activeFilter==='bearish') data=data.filter(t=>Object.values(t.patterns).some(p=>p&&p.signal==='bearish'));
   if(activeFilter==='signal')  data=data.filter(t=>Object.values(t.patterns).some(p=>p&&p.signal!=='none'));
   if(activeFilter==='squeeze') data=data.filter(t=>Object.values(t.squeeze||{}).some(s=>s&&s.squeezing));
-  if(activeFilter==='ranging') data=data.filter(t=>t.rangeData && ['ranging','near-top','near-bottom','dev-above','dev-below','confirmed-up','confirmed-down'].includes(t.rangeData.state));
+  if(activeFilter==='ranging') data=data.filter(t=>t.rangeData && ['ranging','near-top','near-bottom','dev-above','dev-below','confirmed-up','confirmed-down','forming'].includes(t.rangeData.state));
   if(activeFilter==='hconf')   data=data.filter(t=>{
     const s=Object.values(t.patterns).filter(p=>p&&p.signal!=='none');
     // Cutoff raised from 70 to 85 — with the Fibonacci/RSI gates now filtering out weak
@@ -3856,7 +3591,7 @@ function updateStats(){
     return s.length&&s.reduce((a,b)=>a+b.confidence,0)/s.length>=70;
   }).length;
   const squeeze=tokenData.filter(t=>Object.values(t.squeeze||{}).some(s=>s&&s.squeezing)).length;
-  const ranging=tokenData.filter(t=>t.rangeData && ['ranging','near-top','near-bottom','dev-above','dev-below','confirmed-up','confirmed-down'].includes(t.rangeData.state)).length;
+  const ranging=tokenData.filter(t=>t.rangeData && ['ranging','near-top','near-bottom','dev-above','dev-below','confirmed-up','confirmed-down','forming'].includes(t.rangeData.state)).length;
 
   animateStat('s-scanned', scanned, 'sc-scanned');
   animateStat('s-bull',    bull,    'sc-bull');
@@ -4038,119 +3773,7 @@ function getSignalCount(symbol, tf) {
 //   - Freshness: how many candles ago it formed (older = more likely mitigated)
 //   - Mitigation: has price already returned into the zone?
 
-const FVG_LOOKBACK   = 50;   // scan last 50 candles for FVGs
-const FVG_MIN_GAP    = 0.002; // gap must be ≥0.2% of price to matter
-const FVG_MAX_AGE    = 40;   // ignore FVGs older than 40 candles
-const FVG_PROX_PCT   = 0.015; // flag FVG when price within 1.5% of the zone
-const FVG_MIN_QUALITY = 50;  // only keep grade A/B (quality>=50) — grade C is mostly noise
-                              // (tested empirically: ~96% of raw detected FVGs are grade C)
 
-function detectFVGs(closes, highs, lows, opens) {
-  if(!closes || closes.length < FVG_LOOKBACK + 3) return [];
-  const len = closes.length;
-  const approxOpens = opens || closes.map((c,i) => i===0 ? c : closes[i-1]);
-  const fvgs = [];
-
-  const start = Math.max(1, len - FVG_LOOKBACK);
-
-  for(let i = start; i < len - 1; i++){
-    const c1h = highs[i-1],   c1l = lows[i-1];
-    const c2o = approxOpens[i], c2c = closes[i], c2h = highs[i], c2l = lows[i];
-    const c3h = highs[i+1],   c3l = lows[i+1];
-    const age = len - 1 - i; // candles since this FVG formed
-
-    if(age > FVG_MAX_AGE) continue;
-
-    // ── Bullish FVG: gap between c1 high and c3 low ──
-    if(c3l > c1h){
-      const gapTop    = c3l;
-      const gapBottom = c1h;
-      const gapPct    = (gapTop - gapBottom) / gapBottom;
-      if(gapPct < FVG_MIN_GAP) continue;
-
-      // Displacement: middle candle should be strongly bullish (big green body)
-      const bodySize  = (c2c - c2o) / c2o;
-      const wickRatio = c2h > c2l ? (Math.abs(c2c - c2o)) / (c2h - c2l) : 0;
-      if(bodySize < 0.001) continue; // must be a green candle
-
-      // Mitigation check: has price closed inside the gap?
-      const futureLows = lows.slice(i+2);
-      const futureCloses = closes.slice(i+2);
-      // Mitigated if any future candle LOW entered the gap AND closed inside or below it
-      const mitigated = futureLows.some((l, idx) =>
-        l <= gapTop && futureCloses[idx] >= gapBottom && futureCloses[idx] <= gapTop
-      );
-
-      // Displacement score 0-100
-      const dispScore = Math.min(100, Math.round(bodySize * 500 + wickRatio * 30));
-      // Gap score 0-100
-      const gapScore  = Math.min(100, Math.round(gapPct * 2000));
-      // Freshness score — newer = better
-      const freshScore = Math.round((1 - age / FVG_MAX_AGE) * 100);
-      const quality   = Math.round(dispScore * 0.4 + gapScore * 0.35 + freshScore * 0.25);
-
-      fvgs.push({
-        type: 'bullish', gapTop, gapBottom,
-        gapPct, quality, age, mitigated,
-        midpoint: (gapTop + gapBottom) / 2
-      });
-    }
-
-    // ── Bearish FVG: gap between c3 high and c1 low ──
-    if(c1l > c3h){
-      const gapTop    = c1l;
-      const gapBottom = c3h;
-      const gapPct    = (gapTop - gapBottom) / gapBottom;
-      if(gapPct < FVG_MIN_GAP) continue;
-
-      const bodySize  = (c2o - c2c) / c2o; // bearish = open > close
-      const wickRatio = c2h > c2l ? (Math.abs(c2c - c2o)) / (c2h - c2l) : 0;
-      if(bodySize < 0.001) continue; // must be a red candle
-
-      // Mitigated if any future candle HIGH entered the gap AND closed inside or above it
-      const futureHighs2 = highs.slice(i+2);
-      const futureCloses2 = closes.slice(i+2);
-      const mitigated = futureHighs2.some((h, idx) =>
-        h >= gapBottom && futureCloses2[idx] >= gapBottom && futureCloses2[idx] <= gapTop
-      );
-
-      const dispScore  = Math.min(100, Math.round(bodySize * 500 + wickRatio * 30));
-      const gapScore   = Math.min(100, Math.round(gapPct * 2000));
-      const freshScore = Math.round((1 - age / FVG_MAX_AGE) * 100);
-      const quality    = Math.round(dispScore * 0.4 + gapScore * 0.35 + freshScore * 0.25);
-
-      fvgs.push({
-        type: 'bearish', gapTop, gapBottom,
-        gapPct, quality, age, mitigated,
-        midpoint: (gapTop + gapBottom) / 2
-      });
-    }
-  }
-
-  // Only keep grade A/B — grade C is mostly noise (weak displacement, tiny gap, or stale)
-  // and would otherwise still count toward the confidence boost and badges.
-  return fvgs
-    .filter(f => f.quality >= FVG_MIN_QUALITY)
-    .sort((a,b) => b.quality - a.quality)
-    .slice(0, 5);
-}
-
-function getFVGNearPrice(fvgs, currentPrice) {
-  // Find the highest-quality unfilled FVG that price is approaching or inside
-  if(!fvgs || !fvgs.length) return null;
-  const fresh = fvgs.filter(f => !f.mitigated);
-  if(!fresh.length) return null;
-
-  for(const fvg of fresh){
-    const distToTop    = Math.abs(currentPrice - fvg.gapTop)    / fvg.gapTop;
-    const distToBottom = Math.abs(currentPrice - fvg.gapBottom) / fvg.gapBottom;
-    const inside       = currentPrice >= fvg.gapBottom && currentPrice <= fvg.gapTop;
-    const approaching  = Math.min(distToTop, distToBottom) <= FVG_PROX_PCT;
-
-    if(inside || approaching) return { ...fvg, inside, approaching };
-  }
-  return null;
-}
 
 function getFVGBadgeHTML(token) {
   if(!token.fvgData) return '';
@@ -4194,326 +3817,10 @@ function getFVGBadgeHTML(token) {
 
   return `<div class="range-badge" style="color:${color};border-color:${border};background:${bg};margin-top:2px;font-weight:700" title="${tooltip}">${label}</div>`;
 }
-// Returns array of clustered S/R zones: { price, type, touches, lastIdx }
-// Raw pivots alone are noisy — a 100-candle window on typical crypto volatility throws off
-// dozens of them, and treating every single one as its own "level" makes confluence nearly
-// meaningless (tested: a totally random price matches ~94% of the time with the old approach).
-// Real S/R only means something if price has reacted near that zone more than once, so this
-// clusters nearby pivots together and requires a minimum touch count before a zone counts.
-const SR_CLUSTER_PCT  = 0.004; // pivots within 0.4% of each other are treated as the same zone
-const SR_MIN_TOUCHES  = 3;     // require at least 3 reactions before a zone counts as real S/R
 
-function findSRLevels(closes, highs, lows, lookback=100) {
-  const slice_h = highs.slice(-lookback);
-  const slice_l = lows.slice(-lookback);
-  const n = slice_h.length;
 
-  // Raw pivots, tagged with how recently (in candle index) each occurred
-  const rawPivots = [];
-  for(let i=3; i<n-3; i++){
-    const isSwingH = slice_h[i] === Math.max(...slice_h.slice(i-3,i+4));
-    const isSwingL = slice_l[i] === Math.min(...slice_l.slice(i-3,i+4));
-    if(isSwingH) rawPivots.push({ price: slice_h[i], type:'resistance', idx:i });
-    if(isSwingL) rawPivots.push({ price: slice_l[i], type:'support', idx:i });
-  }
-  if(!rawPivots.length) return [];
 
-  // Cluster: sort by price, then greedily group pivots within SR_CLUSTER_PCT of the
-  // running cluster average. Mixed support/resistance pivots can share a zone — a level
-  // that's flipped from resistance to support (or vice versa) over time is still one real zone.
-  rawPivots.sort((a,b) => a.price - b.price);
-  const clusters = [];
-  rawPivots.forEach(p => {
-    const last = clusters[clusters.length-1];
-    if(last && Math.abs(p.price - last.avgPrice) / last.avgPrice <= SR_CLUSTER_PCT){
-      last.members.push(p);
-      last.avgPrice = last.members.reduce((s,m)=>s+m.price,0) / last.members.length;
-    } else {
-      clusters.push({ avgPrice: p.price, members: [p] });
-    }
-  });
 
-  // Convert clusters to zones — require min touches, use the most recent pivot's type
-  // (so a zone reflects its current role, not whichever direction happened first),
-  // and track recency for weighting elsewhere.
-  return clusters
-    .filter(c => c.members.length >= SR_MIN_TOUCHES)
-    .map(c => {
-      const mostRecent = c.members.reduce((a,b) => b.idx > a.idx ? b : a);
-      return {
-        price:   c.avgPrice,
-        type:    mostRecent.type,
-        touches: c.members.length,
-        lastIdx: mostRecent.idx,
-        recency: mostRecent.idx / (n - 1) // 0 (oldest) to 1 (most recent candle in window)
-      };
-    })
-    .sort((a,b) => b.touches - a.touches || b.recency - a.recency);
-}
-
-// Check if a price is within threshold% of a real (multi-touch) S/R zone.
-// Prefers the strongest match — most touches, then most recent — rather than the first
-// one encountered, so confidence boosts reflect genuinely significant levels.
-function checkSRConfluence(drive3Price, srLevels, threshold=0.008) {
-  const matches = srLevels.filter(lvl => Math.abs(drive3Price - lvl.price) / lvl.price <= threshold);
-  if(!matches.length) return null;
-  const best = matches.sort((a,b) => b.touches - a.touches || b.recency - a.recency)[0];
-  return best.type; // 'support' or 'resistance'
-}
-
-// ── MULTI-TF CONFLUENCE ──
-// Returns { tfs: ['4H','1H'], signal: 'bullish'|'bearish' } or null
-function checkMTFConfluence(token) {
-  const tfs = ['SIX_HOUR','ONE_HOUR','THIRTY_MINUTE'];
-  const tfLabel = {'SIX_HOUR':'4H','ONE_HOUR':'1H','THIRTY_MINUTE':'30M'};
-  const bullTFs = tfs.filter(tf => token.patterns[tf]?.signal === 'bullish');
-  const bearTFs = tfs.filter(tf => token.patterns[tf]?.signal === 'bearish');
-  if(bullTFs.length >= 2) return { tfs: bullTFs.map(t=>tfLabel[t]), signal:'bullish' };
-  if(bearTFs.length >= 2) return { tfs: bearTFs.map(t=>tfLabel[t]), signal:'bearish' };
-  return null;
-}
-
-// ── FIXED RANGE VOLUME PROFILE — anchored at the swing pivot ──
-// Mirrors the way this is actually traded on TradingView: find a strong impulsive
-// move ("way mover"), anchor the profile at the exact swing pivot candle (the
-// swing HIGH for an up-move, the swing LOW for a down-move) — not the start of
-// the search window — then build the volume profile from that pivot through to
-// the current candle. VAH/VAL (not raw high/low) are the two tradeable lines;
-// a deviation above VAH or below VAL, in either direction, is the signal.
-const CATALYST_MIN_PCT   = 0.025; // catalyst move must be ≥2.5% (absolute floor)
-const CATALYST_MAX_CANDLES = 6;   // catalyst completes within 6 candles
-const CATALYST_BASELINE_LOOKBACK = 20;  // candles before the window used as this token's own "normal" baseline
-const CATALYST_ATR_MULT  = 4.0;   // move must be 4x the token's own recent avg candle range, not just a flat %
-const CATALYST_VOL_MULT  = 1.5;   // move must carry 1.5x the token's own recent avg volume — real conviction, not a thin wick
-const RANGE_MIN_QUALITY  = 65;    // 0-100 composite score floor — B-grade and up only. C (50-64) cleared the bar but was the noisiest tier in practice.
-const RANGE_MIN_CANDLES  = 12;    // need at least 12 candles of oscillation after the pivot
-const RANGE_MAX_CANDLES  = 60;    // stale after 60 candles
-const RANGE_MIN_WIDTH    = 0.03;  // structural box must be ≥3% wide
-const RANGE_MAX_WIDTH    = 0.18;  // structural box must be ≤18% wide
-const FULL_SWING_MIN     = 2;     // price must make at least 2 full swings (top→bot or bot→top)
-const DEV_THRESHOLD      = 0.015; // 1.5%+ outside VAH/VAL = deviation
-const VALUE_AREA_PCT     = 0.70;  // standard 70% value area
-const VP_BUCKETS         = 30;    // price buckets for the volume profile
-const RANGE_ENABLED_TFS  = new Set(["SIX_HOUR", "ONE_HOUR", "THIRTY_MINUTE"]); // SIX_HOUR key = 4H candles
-
-// Bins volume-at-price across [fromIdx..toIdx] by spreading each candle's volume
-// uniformly across the price levels it touched (high→low) — the standard
-// approximation used when only OHLCV is available, not tick-level data. Returns
-// the Point of Control (highest-volume price) and the Value Area High/Low
-// (the tightest price band containing VALUE_AREA_PCT of total volume, expanded
-// outward from POC one bucket at a time toward whichever side has more volume).
-function computeVolumeProfile(highs, lows, volumes, fromIdx, toIdx){
-  const priceMax = Math.max(...highs.slice(fromIdx, toIdx+1));
-  const priceMin = Math.min(...lows.slice(fromIdx, toIdx+1));
-  if(!(priceMax > priceMin)) return null;
-
-  const bucketSize = (priceMax - priceMin) / VP_BUCKETS;
-  const vol = new Array(VP_BUCKETS).fill(0);
-  const bucketLow  = j => priceMin + j*bucketSize;
-  const bucketHigh = j => priceMin + (j+1)*bucketSize;
-
-  for(let i=fromIdx; i<=toIdx; i++){
-    const h = highs[i], l = lows[i], v = volumes[i] || 0;
-    if(!(v>0)) continue;
-    if(h === l){
-      const j = Math.min(VP_BUCKETS-1, Math.max(0, Math.floor((h-priceMin)/bucketSize)));
-      vol[j] += v;
-      continue;
-    }
-    const jLo = Math.max(0, Math.floor((l-priceMin)/bucketSize));
-    const jHi = Math.min(VP_BUCKETS-1, Math.floor((h-priceMin)/bucketSize));
-    for(let j=jLo; j<=jHi; j++){
-      const overlap = Math.min(h, bucketHigh(j)) - Math.max(l, bucketLow(j));
-      if(overlap > 0) vol[j] += v * (overlap/(h-l));
-    }
-  }
-
-  const total = vol.reduce((a,b)=>a+b,0);
-  if(!(total>0)) return null;
-
-  let pocIdx = 0;
-  for(let j=1;j<VP_BUCKETS;j++) if(vol[j]>vol[pocIdx]) pocIdx=j;
-
-  let lowIdx = pocIdx, highIdx = pocIdx, cum = vol[pocIdx];
-  const target = total * VALUE_AREA_PCT;
-  while(cum < target && (lowIdx>0 || highIdx<VP_BUCKETS-1)){
-    const nextLowVol  = lowIdx>0 ? vol[lowIdx-1] : -1;
-    const nextHighVol = highIdx<VP_BUCKETS-1 ? vol[highIdx+1] : -1;
-    if(nextHighVol >= nextLowVol){ highIdx++; cum += vol[highIdx]; }
-    else { lowIdx--; cum += vol[lowIdx]; }
-  }
-
-  return {
-    poc: bucketLow(pocIdx) + bucketSize/2,
-    vah: bucketHigh(highIdx),
-    val: bucketLow(lowIdx),
-  };
-}
-
-function detectRange(closes, highs, lows, volumes, opens, tfKey) {
-  if(!RANGE_ENABLED_TFS.has(tfKey)) return null;
-  if(!closes || closes.length < CATALYST_MAX_CANDLES + RANGE_MIN_CANDLES + 5) return null;
-  if(!volumes || volumes.length !== closes.length) return null; // volume profile needs real per-candle volume
-
-  const len = closes.length;
-  const approxOpens = opens || closes.map((c,i) => i===0 ? c : closes[i-1]);
-
-  // ── Step 1: Find a catalyst move, then pinpoint the exact swing pivot candle ──
-  const searchBack = Math.min(RANGE_MAX_CANDLES + CATALYST_MAX_CANDLES + 5, len - RANGE_MIN_CANDLES);
-  let catalyst = null;
-
-  for(let i = RANGE_MIN_CANDLES; i <= searchBack; i++){
-    const endIdx   = len - 1 - i;
-    const startIdx = Math.max(0, endIdx - CATALYST_MAX_CANDLES);
-
-    // This token's own recent "normal" behavior — used to tell a genuine impulsive
-    // move apart from that same token's ordinary noise. A flat % threshold treats a
-    // calm major and a wild micro-cap identically, which is what let noise through
-    // in the first place: on a volatile alt, 2.5% within 6 candles is just chop.
-    const baselineStart = Math.max(0, startIdx - CATALYST_BASELINE_LOOKBACK);
-    if(baselineStart >= startIdx) continue;
-    let baseRangeSum = 0, baseVolSum = 0, baseCount = 0;
-    for(let k=baselineStart; k<startIdx; k++){
-      baseRangeSum += (highs[k]-lows[k]) / lows[k];
-      baseVolSum += volumes[k] || 0;
-      baseCount++;
-    }
-    if(baseCount < 5) continue;
-    const baseAvgRangePct = baseRangeSum / baseCount;
-    const baseAvgVol = baseVolSum / baseCount;
-
-    const moveHigh = Math.max(...highs.slice(startIdx, endIdx + 1));
-    const moveLow  = Math.min(...lows.slice(startIdx, endIdx + 1));
-    const movePct  = (moveHigh - moveLow) / moveLow;
-    const requiredMovePct = Math.max(CATALYST_MIN_PCT, baseAvgRangePct * CATALYST_ATR_MULT);
-    if(movePct < requiredMovePct) continue;
-
-    // Require real trading behind the move, not just a wick off a thin order book.
-    if(!(baseAvgVol > 0)) continue;
-    const windowVol = volumes.slice(startIdx, endIdx+1);
-    const windowAvgVol = windowVol.reduce((a,b)=>a+(b||0),0) / windowVol.length;
-    if(windowAvgVol < baseAvgVol * CATALYST_VOL_MULT) continue;
-
-    const closeMove = (closes[endIdx] - closes[startIdx]) / closes[startIdx];
-    const direction = closeMove >= 0 ? 'up' : 'down';
-
-    // Anchor = the swing pivot itself, not the window boundary: swing HIGH for an
-    // up-move (profile builds from the top of the move), swing LOW for a down-move.
-    let anchorIdx = startIdx;
-    if(direction === 'up'){
-      for(let k=startIdx; k<=endIdx; k++) if(highs[k] > highs[anchorIdx]) anchorIdx = k;
-    } else {
-      for(let k=startIdx; k<=endIdx; k++) if(lows[k] < lows[anchorIdx]) anchorIdx = k;
-    }
-
-    const candlesAfter = len - 1 - anchorIdx;
-    if(candlesAfter < RANGE_MIN_CANDLES) continue;
-    if(candlesAfter > RANGE_MAX_CANDLES) continue;
-
-    catalyst = { direction, movePct, anchorIdx, candlesAfter, requiredMovePct, windowAvgVol, baseAvgVol };
-    break;
-  }
-
-  if(!catalyst) return null;
-
-  // ── Step 2: Structural box — full high/low extent from the pivot to now ──
-  // This gates whether the pattern is still alive/valid at all. The tradeable
-  // lines (VAH/VAL) are derived separately below, from actual volume, and are
-  // deliberately tighter than this box.
-  const postH = highs.slice(catalyst.anchorIdx);
-  const postL = lows.slice(catalyst.anchorIdx);
-  const postC = closes.slice(catalyst.anchorIdx);
-  const postO = approxOpens.slice(catalyst.anchorIdx);
-
-  const rangeHigh = Math.max(...postH);
-  const rangeLow  = Math.min(...postL);
-  const rangeWidth = (rangeHigh - rangeLow) / rangeLow;
-  if(rangeWidth < RANGE_MIN_WIDTH || rangeWidth > RANGE_MAX_WIDTH) return null;
-
-  // ── Step 3: Build the volume profile from the pivot to now ──
-  const vp = computeVolumeProfile(highs, lows, volumes, catalyst.anchorIdx, len-1);
-  if(!vp) return null;
-  const { poc, vah, val } = vp;
-  const midpoint = (vah + val) / 2;
-
-  // ── Step 4: Oscillation — price should be making full swings between VAH and VAL ──
-  const topZone    = vah - (vah-val) * 0.15;
-  const bottomZone = val + (vah-val) * 0.15;
-  let swings = 0, lastZone = null;
-  for(let i=0; i<postH.length; i++){
-    if(postH[i] >= topZone && lastZone !== 'top'){ swings++; lastZone = 'top'; }
-    else if(postL[i] <= bottomZone && lastZone !== 'bot'){ swings++; lastZone = 'bot'; }
-  }
-  if(swings < FULL_SWING_MIN * 2) return null;
-
-  // ── Step 5: Quality score — how strong is this specific setup, not just "does it qualify" ──
-  // Built entirely from signal strength already computed above, no new data needed:
-  //  - catalyst strength: how far past the required bar did the move actually go
-  //  - volume strength: how far past the required volume bar did it go
-  //  - value-area tightness: how concentrated is volume around POC vs. the full box (tighter = cleaner consensus)
-  //  - freshness: younger ranges (closer to their catalyst) score higher than near-stale ones
-  //  - swing count: more confirmed swings = more tested, more trustworthy
-  const catalystStrength = Math.max(0, Math.min(100, 50 + (catalyst.movePct / catalyst.requiredMovePct - 1) * 50));
-  const volumeStrength   = Math.max(0, Math.min(100, 50 + (catalyst.windowAvgVol / (catalyst.baseAvgVol * CATALYST_VOL_MULT) - 1) * 50));
-  const tightness         = 1 - (vah - val) / (rangeHigh - rangeLow);
-  const tightnessScore   = Math.max(0, Math.min(100, tightness * 100));
-  const freshnessScore   = Math.max(0, Math.min(100, 100 - (catalyst.candlesAfter / RANGE_MAX_CANDLES) * 100));
-  const swingScore       = Math.max(0, Math.min(100, (swings / (FULL_SWING_MIN * 4)) * 100));
-
-  const qualityScore = Math.round(
-    catalystStrength * 0.25 +
-    volumeStrength   * 0.25 +
-    tightnessScore   * 0.25 +
-    freshnessScore   * 0.15 +
-    swingScore        * 0.10
-  );
-  if(qualityScore < RANGE_MIN_QUALITY) return null; // marginal setup — not worth surfacing
-
-  const grade = qualityScore >= 80 ? 'A' : 'B'; // C used to exist (50-64) but the gate above now excludes it entirely
-
-  // ── Step 6: Containment against the structural box (not VAH/VAL — that's expected to be pierced) ──
-  let bodyBreaks = 0;
-  for(let i=0; i<postC.length; i++){
-    const bH = Math.max(postO[i], postC[i]);
-    const bL = Math.min(postO[i], postC[i]);
-    if(bL > rangeHigh || bH < rangeLow) bodyBreaks++;
-  }
-  if(bodyBreaks / postC.length > 0.30) return null;
-
-  // ── Step 7: Still active? Last 5 closes shouldn't be decisively broken out ──
-  const last5 = postC.slice(-5);
-  if(last5.every(c => c > rangeHigh * 1.02)) return null;
-  if(last5.every(c => c < rangeLow  * 0.98)) return null;
-
-  // ── Step 8: Deviation check, symmetric both directions, gated on VAH/VAL ──
-  const currentClose = closes[len - 1];
-  const prevClose    = closes[len - 2];
-  const prevOpen     = approxOpens[len - 2];
-  const devAbovePct  = (currentClose - vah) / vah;
-  const devBelowPct  = (val - currentClose) / val;
-  const prevBodyHigh = Math.max(prevOpen, prevClose);
-  const prevBodyLow  = Math.min(prevOpen, prevClose);
-  const nowInside    = currentClose <= vah && currentClose >= val;
-  const nearTop    = currentClose >= topZone    && currentClose <= vah;
-  const nearBottom = currentClose <= bottomZone && currentClose >= val;
-
-  const meta = {
-    rangeHigh, rangeLow, rangePct: rangeWidth, // structural box, for context/tooltip only
-    poc, vah, val, midpoint,                   // the actual tradeable lines
-    catalystDir: catalyst.direction,
-    catalystPct: (catalyst.movePct * 100).toFixed(1),
-    swings, candlesInRange: catalyst.candlesAfter,
-    qualityScore, grade                        // how strong this specific setup is, not just "does it qualify"
-  };
-
-  if(prevBodyHigh > vah * (1 + DEV_THRESHOLD) && nowInside) return { state:"confirmed-down", ...meta };
-  if(prevBodyLow  < val * (1 - DEV_THRESHOLD) && nowInside) return { state:"confirmed-up",   ...meta };
-  if(devAbovePct >= DEV_THRESHOLD) return { state:"dev-above", ...meta, deviationPct:(devAbovePct*100).toFixed(1) };
-  if(devBelowPct >= DEV_THRESHOLD) return { state:"dev-below", ...meta, deviationPct:(devBelowPct*100).toFixed(1) };
-  if(nearTop)    return { state:"near-top",    ...meta };
-  if(nearBottom) return { state:"near-bottom", ...meta };
-  return { state:"ranging", ...meta };
-}
 
 
 function getRangeBadgeHTML(token) {
@@ -4522,10 +3829,23 @@ function getRangeBadgeHTML(token) {
   const pct   = (r.rangePct*100).toFixed(1);
   const cat   = r.catalystPct ? ` · ${r.catalystDir==='up'?'↑':'↓'}${r.catalystPct}% catalyst` : '';
   const swing = r.swings ? ` · ${Math.floor(r.swings/2)} full swings` : '';
-  const va    = ` · VAH ${fmtPrice(r.vah)} / POC ${fmtPrice(r.poc)} / VAL ${fmtPrice(r.val)}`;
+  // A forming box has no frozen profile, so there are no value-area numbers to show.
+  const va    = r.vah != null ? ` · VAH ${fmtPrice(r.vah)} / POC ${fmtPrice(r.poc)} / VAL ${fmtPrice(r.val)}` : '';
+  // Both legs of the round trip, so the reclaim is auditable from the tooltip rather
+  // than merely implied by the state name.
+  const dv    = r.deviation
+    ? ` · left the area at ${fmtPrice(r.deviation.exitClose)}, ran to ${fmtPrice(r.deviation.extremePrice)} (${(r.deviation.excursionPct*100).toFixed(1)}%), reclaimed at ${fmtPrice(r.deviation.returnClose)}`
+    : '';
+  // The plan the author trades: enter on the reclaim, target the far edge of the value
+  // area, move the stop to entry at the Gann 0.5.
+  const plan  = r.deviation && r.target != null
+    ? ` · entry ${fmtPrice(r.entry)} → target ${fmtPrice(r.target)}, stop ${fmtPrice(r.invalidation)}, BE at ${fmtPrice(r.breakevenAt)}`
+    : '';
   const q     = r.qualityScore != null ? ` · Quality ${r.qualityScore}/100 (${r.grade})` : '';
   const chip  = r.grade ? `<span class="range-grade grade-${r.grade}">${r.grade}</span>` : '';
   switch(r.state){
+    case 'forming':
+      return `<div class="range-badge forming" title="Box still contained — ${r.candlesInRange} candles so far${cat}. No value area yet: the profile is only frozen once price closes outside the box.">FORMING ${pct}%</div>`;
     case 'ranging':
       return `<div class="range-badge ranging" title="Value area: ${fmtPrice(r.val)} – ${fmtPrice(r.vah)}${va}${cat}${swing}${q}">${chip} IN VALUE AREA ${pct}%</div>`;
     case 'near-top':
@@ -4537,9 +3857,9 @@ function getRangeBadgeHTML(token) {
     case 'dev-below':
       return `<div class="range-badge dev-below" title="Deviation below VAL -${r.deviationPct}%${va}${cat} · liquidity grab — watch for snap back above VAL${q}">${chip} DEV BELOW VAL -${r.deviationPct}%</div>`;
     case 'confirmed-up':
-      return `<div class="range-badge conf-up" title="Deviation below VAL confirmed — back inside. Target: POC ${fmtPrice(r.poc)}${va}${cat}${q}">${chip} DEV ↑ CONFIRMED</div>`;
+      return `<div class="range-badge conf-up" title="Deviation below VAL confirmed — back inside. Target: POC ${fmtPrice(r.poc)}${va}${dv}${plan}${cat}${q}">${chip} DEV ↑ CONFIRMED</div>`;
     case 'confirmed-down':
-      return `<div class="range-badge conf-down" title="Deviation above VAH confirmed — back inside. Target: POC ${fmtPrice(r.poc)}${va}${cat}${q}">${chip} DEV ↓ CONFIRMED</div>`;
+      return `<div class="range-badge conf-down" title="Deviation above VAH confirmed — back inside. Target: POC ${fmtPrice(r.poc)}${va}${dv}${plan}${cat}${q}">${chip} DEV ↓ CONFIRMED</div>`;
     default: return '';
   }
 }
@@ -5710,7 +5030,9 @@ async function processTokenTF(token, tf) {
 
     if(!token.rangeData && ohlc.highs && ohlc.lows && ohlc.volumes){
       const approxOpens = closes.map((c,i) => i===0 ? c : closes[i-1]);
-      token.rangeData = detectRange(closes, ohlc.highs, ohlc.lows, ohlc.volumes, approxOpens, tf);
+      token.rangeData = rangeEngine === 'v2'
+        ? detectRangeV2(closes, ohlc.highs, ohlc.lows, ohlc.volumes, approxOpens, tf)
+        : detectRange(closes, ohlc.highs, ohlc.lows, ohlc.volumes, approxOpens, tf);
     }
     if((tf === 'SIX_HOUR' || tf === 'ONE_HOUR') && ohlc.highs && ohlc.lows){
       const approxOpens = closes.map((c,i) => i===0 ? c : closes[i-1]);
@@ -5808,7 +5130,7 @@ async function startScan(){
   _candleDiagDone = false;
   // Funnel diagnostic — tracks WHERE 3-Drive candidates get rejected across the whole scan,
   // so "no signals found" can be distinguished from "no candidates were ever close."
-  _driveFunnel = { candidates:0, passedGapPullback:0, passedFib:0, passedRSI:0 };
+  resetDriveFunnel();
   const btn=document.getElementById('scanBtn');
   const glBtn=document.getElementById('glScanBtn');
   const rsiBtn=document.getElementById('rsiScanBtn');
@@ -5904,7 +5226,7 @@ async function startScan(){
   // Funnel diagnostic — shows WHERE 3-Drive candidates got rejected across the whole scan.
   // Distinguishes "genuinely no valid patterns occurred" from "filters may be too strict"
   // instead of leaving a silent "no signals" with no way to tell which is true.
-  const f = _driveFunnel;
+  const f = getDriveFunnel();
   if(f.candidates === 0){
     log('Diagnostic: 0 candidate 3-point structures found at all this scan (no qualifying swing triples within spacing rules) — this is a data/structure issue, not a filter-strictness one.', 'warn');
   } else {
@@ -6801,12 +6123,30 @@ function tdpRSISectionHtml(symbol, token){
 function tdpRangeSectionHtml(token){
   const r = token.rangeData;
   if(!r) return '<div class="tdp-empty-mini">No valid range detected this scan</div>';
-  return `
-    <div class="tdp-row"><span class="tdp-row-label">State</span><span class="tdp-row-val">${r.state.replace(/-/g,' ')} <span class="range-grade grade-${r.grade}">${r.grade}</span></span></div>
+  const grade = r.grade ? ` <span class="range-grade grade-${r.grade}">${r.grade}</span>` : '';
+  const stateRow = `<div class="tdp-row"><span class="tdp-row-label">State</span><span class="tdp-row-val">${r.state.replace(/-/g,' ')}${grade}</span></div>`;
+  // Still contained: the profile has not been frozen, so there is nothing honest to
+  // put in the VAH/POC/VAL rows. Show the provisional box and say so instead.
+  if(r.vah == null){
+    return stateRow + `
+    <div class="tdp-row"><span class="tdp-row-label">Box</span><span class="tdp-row-val">${fmtPrice(r.rangeLow)} – ${fmtPrice(r.rangeHigh)}</span></div>
+    <div class="tdp-row"><span class="tdp-row-label">Candles</span><span class="tdp-row-val">${r.candlesInRange} contained</span></div>
+    <div class="tdp-row"><span class="tdp-row-label">Value area</span><span class="tdp-row-val">not frozen yet</span></div>`;
+  }
+  // Gann box over the frozen value area: 0 at VAH, 1 at VAL, 0.5 the midpoint. Shown
+  // for any frozen range, since the levels are a property of the range itself.
+  const gann = r.gann ? `
+    <div class="tdp-row"><span class="tdp-row-label">Gann 0 / 0.5 / 1</span><span class="tdp-row-val">${fmtPrice(r.gann.level0)} / ${fmtPrice(r.gann.level05)} / ${fmtPrice(r.gann.level1)}</span></div>` : '';
+  const dev = r.deviation ? `
+    <div class="tdp-row"><span class="tdp-row-label">Deviation</span><span class="tdp-row-val">${fmtPrice(r.deviation.exitClose)} → ${fmtPrice(r.deviation.extremePrice)} → ${fmtPrice(r.deviation.returnClose)}</span></div>
+    <div class="tdp-row"><span class="tdp-row-label">Entry / Stop</span><span class="tdp-row-val">${fmtPrice(r.entry)} / ${fmtPrice(r.invalidation)}</span></div>
+    <div class="tdp-row"><span class="tdp-row-label">Target</span><span class="tdp-row-val">${fmtPrice(r.target)}</span></div>
+    <div class="tdp-row"><span class="tdp-row-label">Stop → BE at</span><span class="tdp-row-val">${fmtPrice(r.breakevenAt)}${r.breakevenPassedAtEntry ? ' (already passed at entry)' : ''}</span></div>` : '';
+  return stateRow + `
     <div class="tdp-row"><span class="tdp-row-label">VAH</span><span class="tdp-row-val">${fmtPrice(r.vah)}</span></div>
     <div class="tdp-row"><span class="tdp-row-label">POC</span><span class="tdp-row-val">${fmtPrice(r.poc)}</span></div>
     <div class="tdp-row"><span class="tdp-row-label">VAL</span><span class="tdp-row-val">${fmtPrice(r.val)}</span></div>
-    <div class="tdp-row"><span class="tdp-row-label">Quality</span><span class="tdp-row-val">${r.qualityScore}/100</span></div>`;
+    <div class="tdp-row"><span class="tdp-row-label">Quality</span><span class="tdp-row-val">${r.qualityScore}/100</span></div>` + gann + dev;
 }
 
 function tdpOrderbookSectionHtml(symbol){
@@ -7829,6 +7169,7 @@ function toggleTheme() {
 // Init on load
 initTheme();
 applyDataMarketUI();
+applyRangeEngineUI();
 
 function toggleGuide(){
   const b=document.getElementById('guideBody');
