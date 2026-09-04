@@ -229,13 +229,6 @@ body {
 
 /* Token search */
 .token-search-wrap { position: relative; display: flex; align-items: center; }
-.search-toggle {
-  background: var(--bg2); border: 1px solid var(--border); color: var(--text-2);
-  width: 30px; height: 30px; border-radius: var(--r-md);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 0.85rem; cursor: pointer; transition: all var(--t-fast);
-}
-.search-toggle:hover { border-color: var(--blue); color: var(--blue); }
 .token-search-input {
   background: var(--bg2); border: 1px solid var(--blue); color: var(--text);
   border-radius: var(--r-md); padding: 6px 10px; font-family: var(--font-mono);
@@ -243,7 +236,7 @@ body {
 }
 .token-search-input:focus { outline: none; box-shadow: 0 0 12px rgba(6,229,208,0.25); }
 .token-search-dropdown {
-  position: absolute; top: calc(100% + 6px); right: 0; width: 220px;
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0; width: auto;
   background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-lg);
   box-shadow: var(--shadow-lg); z-index: 500; overflow: hidden; max-height: 280px; overflow-y: auto;
 }
@@ -782,6 +775,9 @@ input.ctrl::placeholder { color: var(--text-3); }
   display: flex; align-items: center; gap: 6px;
   font-family: var(--font-ui); font-size: 0.62rem; color: var(--amber);
 }
+.conf-bonus-row + .conf-bonus-row { border-top: none; margin-top: 0; padding-top: 4px; }
+.conf-trend-warn { color: var(--amber); }
+.conf-trend-ok   { color: var(--green); }
 
 /* Three Drives cards — simpler, same visual family */
 .conf-3d-card {
@@ -874,12 +870,12 @@ input.ctrl::placeholder { color: var(--text-3); }
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  min-width: 176px;
+  min-width: 260px;
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   box-shadow: var(--shadow-lg);
-  padding: 6px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -908,6 +904,30 @@ input.ctrl::placeholder { color: var(--text-3); }
   transition: all var(--t-fast) var(--ease-out);
 }
 .more-dropdown button:hover { background: var(--blue-dim); color: var(--blue); }
+.more-section-label {
+  font-family: var(--font-ui);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 8px 4px 4px;
+}
+.more-section-label:first-child { padding-top: 4px; }
+.more-divider { height: 1px; background: var(--border); margin: 6px 2px; flex-shrink: 0; }
+.more-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-2);
+}
+.more-dropdown .tf-group { margin: 0 4px 4px; }
+.more-dropdown .auto-refresh { margin: 0 4px; width: calc(100% - 8px); box-sizing: border-box; }
+.more-dropdown .token-search-wrap { margin: 0 4px 4px; width: calc(100% - 8px); }
+.more-dropdown .token-search-input { width: 100%; box-sizing: border-box; margin-left: 0; }
 
 /* ═══════════════════════════════════════
    BTC/ETH TREND BAR
@@ -2249,8 +2269,6 @@ input.ctrl::placeholder { color: var(--text-3); }
 
 @media (max-width: 480px) {
   .token-detail-popup { right: var(--sp-2); left: var(--sp-2); width: auto; top: 88px; }
-  .token-search-input { width: 120px; }
-  .token-search-dropdown { width: 200px; }
 }
 
 </style>
@@ -2298,45 +2316,64 @@ input.ctrl::placeholder { color: var(--text-3); }
     </div>
   </div>
   <div class="topbar-right">
-    <div class="token-search-wrap" id="tokenSearchWrap">
-      <button class="search-toggle" id="searchToggle" onclick="toggleTokenSearch()" title="Search token" aria-label="Search token">🔍</button>
-      <input type="text" id="tokenSearchInput" class="token-search-input" placeholder="Search token…" style="display:none" oninput="onTokenSearchInput()" onkeydown="onTokenSearchKeydown(event)" autocomplete="off">
-      <div class="token-search-dropdown" id="tokenSearchDropdown" style="display:none"></div>
-    </div>
     <div class="live-status" id="liveStatus">
       <div id="liveDot" class="live-dot"></div>
       <span id="liveLabel" class="live-label" aria-live="polite">checking…</span>
     </div>
-    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode" aria-label="Toggle light and dark mode">🌙</button>
-    <div class="tf-group" role="group" aria-label="Data market: perpetual futures or spot">
-      <button class="tf-btn" id="marketBtnPerp" onclick="setDataMarket('perp')" aria-pressed="true">PERP</button>
-      <button class="tf-btn" id="marketBtnSpot" onclick="setDataMarket('spot')" aria-pressed="false">SPOT</button>
-    </div>
-    <div class="tf-group" role="group" aria-label="Range engine: fixed-range volume profile or legacy">
-      <button class="tf-btn" id="rangeBtnV2" onclick="setRangeEngine('v2')" title="Fixed Range Volume Profile: the profile is frozen at the pre-expansion candle and deviations fire on the reclaim" aria-pressed="true">FRVP</button>
-      <button class="tf-btn" id="rangeBtnV1" onclick="setRangeEngine('v1')" title="Legacy range: profiles from the anchor to the current candle, recomputed every scan" aria-pressed="false">V1</button>
-    </div>
     <div class="more-menu">
-      <button class="more-toggle" id="moreToggle" onclick="toggleMoreMenu()" title="More" aria-label="More options" aria-haspopup="true" aria-expanded="false">⋯</button>
-      <div class="more-dropdown" id="moreDropdown" role="menu" aria-label="More options">
+      <button class="more-toggle" id="moreToggle" onclick="toggleMoreMenu()" title="Settings & more" aria-label="Settings and more options" aria-haspopup="true" aria-expanded="false">⋯</button>
+      <div class="more-dropdown" id="moreDropdown" role="menu" aria-label="Settings and more options">
+
+        <div class="more-section-label">Search</div>
+        <div class="token-search-wrap" id="tokenSearchWrap">
+          <input type="text" id="tokenSearchInput" class="token-search-input" placeholder="Search token…" oninput="onTokenSearchInput()" onkeydown="onTokenSearchKeydown(event)" autocomplete="off">
+          <div class="token-search-dropdown" id="tokenSearchDropdown" style="display:none"></div>
+        </div>
+
+        <div class="more-divider"></div>
+
+        <div class="more-section-label">Appearance</div>
+        <div class="more-row">
+          <span>Theme</span>
+          <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode" aria-label="Toggle light and dark mode">🌙</button>
+        </div>
+
+        <div class="more-section-label">Market</div>
+        <div class="tf-group" role="group" aria-label="Data market: perpetual futures or spot">
+          <button class="tf-btn" id="marketBtnPerp" onclick="setDataMarket('perp')" aria-pressed="true">PERP</button>
+          <button class="tf-btn" id="marketBtnSpot" onclick="setDataMarket('spot')" aria-pressed="false">SPOT</button>
+        </div>
+
+        <div class="more-section-label">Range Engine</div>
+        <div class="tf-group" role="group" aria-label="Range engine: fixed-range volume profile or legacy">
+          <button class="tf-btn" id="rangeBtnV2" onclick="setRangeEngine('v2')" title="Fixed Range Volume Profile: the profile is frozen at the pre-expansion candle and deviations fire on the reclaim" aria-pressed="true">FRVP</button>
+          <button class="tf-btn" id="rangeBtnV1" onclick="setRangeEngine('v1')" title="Legacy range: profiles from the anchor to the current candle, recomputed every scan" aria-pressed="false">V1</button>
+        </div>
+
+        <div class="more-divider"></div>
+
+        <div class="more-section-label">Auto-Scan</div>
+        <div class="auto-refresh" id="arWidget">
+          <label>
+            <input type="checkbox" id="arEnabled" onchange="toggleAutoRefresh()">
+            auto-scan
+          </label>
+          <select class="ar-select" id="arInterval" onchange="resetCountdown()">
+            <option value="900">15m</option>
+            <option value="1800" selected>30m</option>
+            <option value="3600">1h</option>
+            <option value="7200">2h</option>
+            <option value="14400">4h</option>
+          </select>
+          <span class="countdown" id="arCountdown">—</span>
+        </div>
+
+        <div class="more-divider"></div>
+
         <button role="menuitem" onclick="closeMoreMenu();openAlerts()"><span aria-hidden="true">🔔</span> Alerts</button>
         <button role="menuitem" onclick="closeMoreMenu();openHitRate()" id="hitRateBtn"><span aria-hidden="true">📊</span> Hit Rate</button>
         <button role="menuitem" onclick="closeMoreMenu();openJournal()"><span aria-hidden="true">📓</span> Journal</button>
       </div>
-    </div>
-    <div class="auto-refresh" id="arWidget">
-      <label>
-        <input type="checkbox" id="arEnabled" onchange="toggleAutoRefresh()">
-        auto-scan
-      </label>
-      <select class="ar-select" id="arInterval" onchange="resetCountdown()">
-        <option value="900">15m</option>
-        <option value="1800" selected>30m</option>
-        <option value="3600">1h</option>
-        <option value="7200">2h</option>
-        <option value="14400">4h</option>
-      </select>
-      <span class="countdown" id="arCountdown">—</span>
     </div>
   </div>
 </div>
@@ -2899,8 +2936,11 @@ let obScanning = false;
 // of the three source scans have completed, so it progressively fills in
 // rather than needing to wait for all three before showing anything.
 const CONF_RSI_EXTREME  = 30;   // matches the 30/70 hot/cold zone used everywhere else in the app
+const CONF_RSI_TREND_RELAXED = 45; // relaxed bar for WITH-trend pullback checks — pullbacks in a real trend rarely reach a textbook extreme
 const CONF_OB_IMBALANCE = 0.50; // 50%+ imbalance = real, not marginal, pressure
 const CONF_SR_TOLERANCE = 0.015;// within 1.5% of a support/resistance zone counts as "at" it
+const CONF_RANGE_TREND_BONUS   = 10; // Range pillar score bonus when aligned with the 4H trend
+const CONF_RANGE_TREND_PENALTY = 10; // Range pillar score penalty when it fights the 4H trend
 
 const STABLES = new Set([
   'USDT','USDC','BUSD','DAI','TUSD','USDP','FDUSD','USDD','FRAX','LUSD','SUSD',
@@ -5815,35 +5855,67 @@ function renderOrderbook(){
 // rather than needing all three scans done before showing anything.
 // ══════════════════════════════════════════════════════════
 
-function confluenceRSI(token, dir){
+// Reuses the same 4H trend detector already used to flag counter-trend 3-Drive alerts —
+// RSI and Range are both mean-reversion tools, and mean-reversion breaks down hard
+// against a genuine trend (RSI staying pinned during a real uptrend isn't "about to
+// reverse," it's what a healthy trend looks like). Rather than a separate mechanism,
+// this reuses the exact same trend read the rest of the app already trusts.
+function getTokenTrend(token){
+  const closes = token.ohlc && token.ohlc.SIX_HOUR && token.ohlc.SIX_HOUR.closes;
+  if(!closes) return 'neutral';
+  try { return get4HTrend(closes); } catch(e){ return 'neutral'; }
+}
+
+function confluenceRSI(token, dir, trend){
   const rsiEntry = rsiRaw.find(r => r.symbol === token.symbol);
   const r1h = rsiEntry ? rsiEntry.rsi1h : (token.rsi && token.rsi.ONE_HOUR);
   const r4h = rsiEntry ? rsiEntry.rsi4h : (token.rsi && token.rsi.SIX_HOUR);
   if(r1h == null && r4h == null) return null;
 
-  const isExtreme = v => dir === 'bullish' ? v <= CONF_RSI_EXTREME : v >= (100 - CONF_RSI_EXTREME);
+  // A pullback in a real uptrend rarely reaches a textbook oversold extreme — requiring
+  // RSI<=30 there means the bullish pillar almost never fires exactly when it should.
+  // The relaxed bar only applies WITH the trend; AGAINST the trend keeps the strict bar,
+  // since a counter-trend reversal call needs more evidence, not less.
+  const withTrend = (dir === 'bullish' && trend === 'up') || (dir === 'bearish' && trend === 'down');
+  const bar = withTrend ? CONF_RSI_TREND_RELAXED : CONF_RSI_EXTREME;
+
+  const isExtreme = v => dir === 'bullish' ? v <= bar : v >= (100 - bar);
   const oneOk = r1h != null && isExtreme(r1h);
   const fourOk = r4h != null && isExtreme(r4h);
   if(!oneOk && !fourOk) return null;
 
   const both = oneOk && fourOk;
   const depthOf = v => dir === 'bullish'
-    ? Math.max(0, Math.min(1, (CONF_RSI_EXTREME - v) / CONF_RSI_EXTREME))
-    : Math.max(0, Math.min(1, (v - (100 - CONF_RSI_EXTREME)) / CONF_RSI_EXTREME));
+    ? Math.max(0, Math.min(1, (bar - v) / bar))
+    : Math.max(0, Math.min(1, (v - (100 - bar)) / bar));
   const depth = both ? (depthOf(r1h) + depthOf(r4h)) / 2 : depthOf(oneOk ? r1h : r4h);
-  const points = Math.round((both ? 45 : 30) + depth * 10);
+  // A relaxed-bar (with-trend) reading is real, but a 45-level pullback isn't the same
+  // conviction as a genuine sub-30 extreme — the score shouldn't pretend otherwise.
+  const base = both ? 45 : 30;
+  const points = Math.round((withTrend ? base * 0.85 : base) + depth * 10);
 
-  return { concrete: true, both, r1h, r4h, points };
+  return { concrete: true, both, r1h, r4h, points, bar, withTrend };
 }
 
-function confluenceRange(token, dir){
+function confluenceRange(token, dir, trend){
   const r = token.rangeData;
   if(!r) return null;
   const wantStates = dir === 'bullish' ? ['dev-below', 'confirmed-up'] : ['dev-above', 'confirmed-down'];
   if(!wantStates.includes(r.state)) return null;
   const confirmed = r.state === 'confirmed-up' || r.state === 'confirmed-down';
-  const points = Math.round((confirmed ? 40 : 30) + (r.qualityScore / 100) * 15);
-  return { concrete: true, state: r.state, confirmed, grade: r.grade, points };
+  let points = Math.round((confirmed ? 40 : 30) + (r.qualityScore / 100) * 15);
+
+  // A dip-buy inside a confirmed uptrend (or rip-sell inside a confirmed downtrend) is a
+  // meaningfully stronger setup than the same deviation with no trend context. A
+  // deviation call fighting the trend (e.g. calling a top mid-uptrend) gets discounted,
+  // not treated with equal confidence — the qualifying states themselves don't change,
+  // only how much this pillar contributes to the final score.
+  const withTrend = (dir === 'bullish' && trend === 'up') || (dir === 'bearish' && trend === 'down');
+  const againstTrend = (dir === 'bullish' && trend === 'down') || (dir === 'bearish' && trend === 'up');
+  if(withTrend) points += CONF_RANGE_TREND_BONUS;
+  if(againstTrend) points = Math.max(10, points - CONF_RANGE_TREND_PENALTY);
+
+  return { concrete: true, state: r.state, confirmed, grade: r.grade, points, withTrend, againstTrend };
 }
 
 function confluenceOrderbook(token, dir){
@@ -5873,8 +5945,11 @@ function confluenceSR(token, dir){
 }
 
 function computeConfluenceSignal(token, dir){
-  const rsi = confluenceRSI(token, dir);
-  const range = confluenceRange(token, dir);
+  const trend = getTokenTrend(token);
+  // Order Book isn't a mean-reversion tool — real-time resting supply/demand doesn't need
+  // trend adaptation the way RSI/Range do, so it's untouched here.
+  const rsi = confluenceRSI(token, dir, trend);
+  const range = confluenceRange(token, dir, trend);
   const ob = confluenceOrderbook(token, dir);
   const pillarCount = [rsi, range, ob].filter(Boolean).length;
   if(pillarCount < 2) return null; // the hard rule — 2 of 3 core pillars, no exceptions
@@ -5884,8 +5959,13 @@ function computeConfluenceSignal(token, dir){
   const score = Math.min(100, rawScore);
   const grade = score >= 75 ? 'A' : 'B';
 
+  // Same treatment as 3-Drive: included, never hard-excluded, but clearly flagged when
+  // the overall call fights the established 4H trend rather than presented with equal
+  // confidence to a trend-aligned signal.
+  const trendConflict = (dir === 'bearish' && trend === 'up') || (dir === 'bullish' && trend === 'down');
+
   return { symbol: token.symbol, name: token.name, price: token.price, direction: dir,
-    rsi, range, ob, sr, pillarCount, score, grade };
+    rsi, range, ob, sr, pillarCount, score, grade, trend4h: trend, trendConflict };
 }
 
 // Builds the full confluence list across all scanned tokens, both directions.
@@ -5911,10 +5991,19 @@ function confPillarRow(icon, label, active, detail){
 
 function confluenceCardHtml(sig){
   const dir = sig.direction;
-  const rsiDetail = sig.rsi ? `${sig.rsi.both ? '1H+4H' : (sig.rsi.r1h!=null && (sig.direction==='bullish'?sig.rsi.r1h<=CONF_RSI_EXTREME:sig.rsi.r1h>=100-CONF_RSI_EXTREME) ? '1H' : '4H')} ${(sig.rsi.r1h??sig.rsi.r4h).toFixed(0)}` : 'not extreme';
-  const rangeDetail = sig.range ? sig.range.state.replace(/-/g,' ') + ` (${sig.range.grade})` : 'no active deviation';
+  const rsiBar = sig.rsi ? sig.rsi.bar : CONF_RSI_EXTREME;
+  const rsiWhichTf = sig.rsi ? (sig.rsi.r1h!=null && (dir==='bullish'?sig.rsi.r1h<=rsiBar:sig.rsi.r1h>=100-rsiBar) ? '1H' : '4H') : null;
+  const rsiDetail = sig.rsi
+    ? `${sig.rsi.both ? '1H+4H' : rsiWhichTf} ${(sig.rsi.r1h??sig.rsi.r4h).toFixed(0)}${sig.rsi.withTrend ? ' (pullback)' : ''}`
+    : 'not extreme';
+  const rangeDetail = sig.range
+    ? sig.range.state.replace(/-/g,' ') + ` (${sig.range.grade})` + (sig.range.withTrend ? ' · with trend' : sig.range.againstTrend ? ' · counter-trend' : '')
+    : 'no active deviation';
   const obDetail = sig.ob ? `${sig.ob.imbalance>=0?'+':''}${(sig.ob.imbalance*100).toFixed(0)}%${sig.ob.wallConfirmed?' ✓':''}` : 'imbalance <50%';
   const bonusHtml = sig.sr ? `<div class="conf-bonus-row">◎ S/R bonus — price at ${fmtPrice(sig.sr.level)}</div>` : '';
+  const trendHtml = sig.trendConflict
+    ? `<div class="conf-bonus-row conf-trend-warn">⚠ AGAINST 4H TREND (4H is ${sig.trend4h})</div>`
+    : (sig.trend4h !== 'neutral' ? `<div class="conf-bonus-row conf-trend-ok">✓ aligned with 4H ${sig.trend4h}trend</div>` : '');
 
   return `<div class="conf-card conf-${dir}" onclick="window.open(tvUrl('${sig.symbol}','ONE_HOUR'),'_blank')" title="Open ${sig.symbol} on TradingView">
     <div class="conf-card-header">
@@ -5935,6 +6024,7 @@ function confluenceCardHtml(sig){
       ${confPillarRow('▤', 'Order Book', !!sig.ob, obDetail)}
     </div>
     ${bonusHtml}
+    ${trendHtml}
   </div>`;
 }
 
@@ -5999,20 +6089,6 @@ function findTokenBySymbol(sym){
   return tokenData.find(t => t.symbol === sym);
 }
 
-function toggleTokenSearch(){
-  const input = document.getElementById('tokenSearchInput');
-  const dd = document.getElementById('tokenSearchDropdown');
-  const shown = input.style.display !== 'none';
-  if(shown){
-    input.style.display = 'none';
-    dd.style.display = 'none';
-    input.value = '';
-  } else {
-    input.style.display = 'inline-block';
-    input.focus();
-  }
-}
-
 function onTokenSearchInput(){
   const q = document.getElementById('tokenSearchInput').value.trim().toUpperCase();
   const dd = document.getElementById('tokenSearchDropdown');
@@ -6038,14 +6114,14 @@ function onTokenSearchKeydown(e){
     const match = tokenData.find(t => t.symbol.toUpperCase() === q) || tokenData.find(t => t.symbol.toUpperCase().includes(q));
     if(match) selectTokenSearch(match.symbol);
   } else if(e.key === 'Escape'){
-    toggleTokenSearch();
+    closeMoreMenu();
   }
 }
 
 function selectTokenSearch(symbol){
   document.getElementById('tokenSearchDropdown').style.display = 'none';
-  document.getElementById('tokenSearchInput').style.display = 'none';
   document.getElementById('tokenSearchInput').value = '';
+  closeMoreMenu();
   openTokenDetail(symbol);
 }
 
@@ -7184,12 +7260,25 @@ function toggleMoreMenu(){
   const btn = document.getElementById('moreToggle');
   btn.classList.toggle('active', open);
   btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if(open){
+    const input = document.getElementById('tokenSearchInput');
+    if(input) setTimeout(() => input.focus(), 50); // after the open transition starts, not before
+  } else {
+    resetMoreMenuSearch();
+  }
 }
 function closeMoreMenu(){
   document.getElementById('moreDropdown').classList.remove('open');
   const btn = document.getElementById('moreToggle');
   btn.classList.remove('active');
   btn.setAttribute('aria-expanded', 'false');
+  resetMoreMenuSearch();
+}
+function resetMoreMenuSearch(){
+  const input = document.getElementById('tokenSearchInput');
+  const dd = document.getElementById('tokenSearchDropdown');
+  if(input) input.value = '';
+  if(dd){ dd.style.display = 'none'; dd.innerHTML = ''; }
 }
 document.addEventListener('click', function(e){
   const menu = document.getElementById('moreMenu') || document.querySelector('.more-menu');
@@ -7495,6 +7584,8 @@ async function confluenceAlertsCheck(){
     confidence: sig.score,
     pillars: [sig.rsi ? 'RSI' : null, sig.range ? 'Range' : null, sig.ob ? 'Order Book' : null].filter(Boolean).join(' + '),
     srBonus: !!sig.sr,
+    trendConflict: !!sig.trendConflict,
+    trend4h: sig.trend4h,
   }));
 
   try {
