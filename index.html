@@ -668,6 +668,27 @@ input.ctrl::placeholder { color: var(--text-3); }
 .ob-row:hover { background: var(--bg-hover); }
 .ob-row:last-child { border-bottom: none; }
 .ob-rank { font-size: 0.68rem; color: var(--text-3); }
+.token-icon {
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  vertical-align: middle;
+  background: var(--bg3);
+}
+.token-icon-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg3);
+  color: var(--text-3);
+  font-weight: 700;
+  font-family: var(--font-ui);
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+.token-icon-row { display: flex; align-items: center; gap: 8px; }
+
 .ob-sym { display: flex; flex-direction: column; gap: 1px; }
 .ob-sym-main { font-size: 0.78rem; font-weight: 700; color: var(--text); font-family: var(--font-ui); }
 .ob-sym-sub { font-size: 0.58rem; color: var(--text-3); }
@@ -2280,6 +2301,7 @@ input.ctrl::placeholder { color: var(--text-3); }
 <!-- TOKEN DETAIL POPUP -->
 <div class="token-detail-popup" id="tokenDetailPopup" style="display:none">
   <div class="tdp-header" onclick="tdpToggleMinimize()">
+    <span id="tdpIcon"></span>
     <span class="tdp-sym" id="tdpSym">—</span>
     <span class="tdp-price" id="tdpPrice">—</span>
     <span class="tdp-min-summary" id="tdpMinSummary"></span>
@@ -3295,6 +3317,7 @@ async function fetchTopTokens(n) {
       change24h: t.change24h || 0,
       volume: t.volume,
       marketCap: t.marketCap || null,
+      icon: t.icon || null,
       productId: t.symbol+'-USD',
       patterns:{'SIX_HOUR':null,'ONE_HOUR':null,'THIRTY_MINUTE':null},
       squeeze:{'SIX_HOUR':null,'ONE_HOUR':null,'THIRTY_MINUTE':null}
@@ -3319,6 +3342,20 @@ function getFallback(n){
 }
 
 // ── FORMAT HELPERS ──
+// One shared icon renderer, used everywhere a token symbol appears. Falls back to a
+// lettered badge (not a broken-image icon) if the URL is missing or fails to load —
+// CoinGecko has icons for virtually every top-100 coin, but graceful degradation costs
+// nothing and avoids ever showing a broken-image glyph.
+function tokenIconHtml(token, size){
+  size = size || 20;
+  const letter = ((token && token.symbol) || '?').charAt(0).toUpperCase();
+  const fallback = `<span class='token-icon-fallback' style='width:${size}px;height:${size}px;font-size:${Math.round(size*0.5)}px'>${letter}</span>`;
+  if(token && token.icon){
+    return `<img src="${token.icon}" alt="" class="token-icon" width="${size}" height="${size}" loading="lazy" onerror="this.outerHTML='${fallback.replace(/'/g,"\\'")}'">`;
+  }
+  return fallback;
+}
+
 function fmtPrice(p){
   if(!p) return '—';
   if(p>=1000) return '$'+p.toLocaleString('en',{maximumFractionDigits:0});
@@ -3557,9 +3594,12 @@ function renderTable(){
     const avgConf = (() => { const s=Object.values(t.patterns).filter(p=>p&&p.signal!=='none'); return s.length?Math.round(s.reduce((a,b)=>a+b.confidence,0)/s.length):0; })();
     return `<div class="token-row${avgConf>=75?' high-conf':''}" onclick="toggleChartPanel(this,'${t.symbol}')" style="cursor:pointer">
       <div class="rank">${t.rank}</div>
-      <div class="token-info">
-        ${symHTML}
-        <span class="token-name">${t.name}</span>
+      <div class="token-icon-row">
+        ${tokenIconHtml(t, 24)}
+        <div class="token-info">
+          ${symHTML}
+          <span class="token-name">${t.name}</span>
+        </div>
       </div>
       <div class="price"><span id="live-${t.symbol}">${fmtPrice(t.price)}</span></div>
       <div>${chgStr}${rsiZoneBadge}${volBadge}</div>
@@ -5404,6 +5444,7 @@ async function scanGainersLosers(tokens){
           out.push({
             symbol: token.symbol,
             name: token.name || token.symbol,
+            icon: token.icon || null,
             price: candlePrice,   // gets overwritten live by the WebSocket ticker
             volume: token.volume || 0,
             closes: data.closes,  // kept (not just a frozen % change) so the anchor can roll forward in real time
@@ -5463,7 +5504,7 @@ function glRowHtml(rank, t, chg){
   const pos = chg >= 0;
   return `<div class="gl-row" onclick="window.open(tvUrl('${t.symbol}','ONE_HOUR'),'_blank')" title="Open ${t.symbol} on TradingView">
     <div class="gl-rank">${rank}</div>
-    <div class="gl-sym"><span class="gl-sym-main">${t.symbol}</span><span class="gl-sym-sub" id="gl-price-${t.symbol}">${fmtPrice(t.price)}</span></div>
+    <div class="token-icon-row">${tokenIconHtml(t, 20)}<div class="gl-sym"><span class="gl-sym-main">${t.symbol}</span><span class="gl-sym-sub" id="gl-price-${t.symbol}">${fmtPrice(t.price)}</span></div></div>
     <div class="gl-chg ${pos?'pos':'neg'}" id="gl-chg-${t.symbol}">${pos?'+':''}${chg.toFixed(2)}%</div>
     <div class="gl-vol">${fmtVolShort(t.volume)}</div>
   </div>`;
@@ -5539,6 +5580,7 @@ async function buildRSIRanking(tokens){
   const out = tokens.map(t => ({
     symbol: t.symbol,
     name: t.name || t.symbol,
+    icon: t.icon || null,
     price: t.price,
     rsi1h: (t.rsi && t.rsi.ONE_HOUR != null) ? t.rsi.ONE_HOUR : null,
     rsi4h: (t.rsi && t.rsi.SIX_HOUR != null) ? t.rsi.SIX_HOUR : null,
@@ -5601,7 +5643,7 @@ function rsiRowHtml(rank, r, val){
   const pos = Math.max(2, Math.min(98, val)); // keep marker inside the visible track
   return `<div class="rsi-row" onclick="window.open(tvUrl('${r.symbol}','${rsiTimeframe}'),'_blank')" title="Open ${r.symbol} on TradingView">
     <div class="rsi-rank">${rank}</div>
-    <div class="rsi-sym">${r.symbol}</div>
+    <div class="token-icon-row">${tokenIconHtml(r, 18)}<div class="rsi-sym">${r.symbol}</div></div>
     <div class="rsi-price">${fmtPrice(r.price)}</div>
     <div class="rsi-bar-track">
       <div class="rsi-bar-zone-line" style="left:30%"></div>
@@ -5713,6 +5755,7 @@ async function scanOrderbooks(tokens){
           out.push({
             symbol: token.symbol,
             name: token.name || token.symbol,
+            icon: token.icon || null,
             price,
             source: data.source, // which exchange actually won the race for this token
             imbalance: (bidNotional - askNotional) / (bidNotional + askNotional), // -1 (all ask) .. +1 (all bid) — already scale-invariant, no fix needed here
@@ -5820,7 +5863,7 @@ function obRowHtml(rank, t, sideKey){
     : obWallHtml(t.askWallPrice, t.askWallNotional, t.askWallVolPct, 'resting ask', t.wallConfirmed);
   return `<div class="ob-row" onclick="window.open(tvUrl('${t.symbol}','ONE_HOUR'),'_blank')" title="Open ${t.symbol} on TradingView">
     <div class="ob-rank">${rank}</div>
-    <div class="ob-sym"><span class="ob-sym-main">${t.symbol}</span><span class="ob-sym-sub">${fmtPrice(t.price)} <span class="ob-source">${obSourceLabel(t.source)}</span></span></div>
+    <div class="token-icon-row">${tokenIconHtml(t, 20)}<div class="ob-sym"><span class="ob-sym-main">${t.symbol}</span><span class="ob-sym-sub">${fmtPrice(t.price)} <span class="ob-source">${obSourceLabel(t.source)}</span></span></div></div>
     <div class="ob-imbalance ${pos?'pos':'neg'}">${pos?'+':''}${(t.imbalance*100).toFixed(0)}%</div>
     ${wallHtml}
   </div>`;
@@ -5964,7 +6007,7 @@ function computeConfluenceSignal(token, dir){
   // confidence to a trend-aligned signal.
   const trendConflict = (dir === 'bearish' && trend === 'up') || (dir === 'bullish' && trend === 'down');
 
-  return { symbol: token.symbol, name: token.name, price: token.price, direction: dir,
+  return { symbol: token.symbol, name: token.name, icon: token.icon || null, price: token.price, direction: dir,
     rsi, range, ob, sr, pillarCount, score, grade, trend4h: trend, trendConflict };
 }
 
@@ -6007,9 +6050,12 @@ function confluenceCardHtml(sig){
 
   return `<div class="conf-card conf-${dir}" onclick="window.open(tvUrl('${sig.symbol}','ONE_HOUR'),'_blank')" title="Open ${sig.symbol} on TradingView">
     <div class="conf-card-header">
-      <div>
-        <div class="conf-card-sym">${sig.symbol}</div>
-        <div class="conf-card-price">${fmtPrice(sig.price)}</div>
+      <div class="token-icon-row">
+        ${tokenIconHtml(sig, 22)}
+        <div>
+          <div class="conf-card-sym">${sig.symbol}</div>
+          <div class="conf-card-price">${fmtPrice(sig.price)}</div>
+        </div>
       </div>
       <div class="conf-dir-badge">${dir==='bullish'?'▲ LONG':'▼ SHORT'}</div>
     </div>
@@ -6033,9 +6079,12 @@ function conf3DriveCardHtml(token, tf, p){
   const srTag = p.srLevel ? `<span class="conf-3d-tag">◎ ${p.srLevel}</span>` : '';
   return `<div class="conf-3d-card conf-${dir}" onclick="window.open(tvUrl('${token.symbol}','${tf}'),'_blank')" title="Open ${token.symbol} on TradingView">
     <div class="conf-3d-header">
-      <div>
-        <div class="conf-3d-sym">${token.symbol}</div>
-        <div class="conf-card-price">${fmtPrice(token.price)}</div>
+      <div class="token-icon-row">
+        ${tokenIconHtml(token, 20)}
+        <div>
+          <div class="conf-3d-sym">${token.symbol}</div>
+          <div class="conf-card-price">${fmtPrice(token.price)}</div>
+        </div>
       </div>
       <div class="conf-3d-conf">${p.confidence}%</div>
     </div>
@@ -6101,7 +6150,7 @@ function onTokenSearchInput(){
   } else {
     dd.innerHTML = matches.map(t =>
       `<div class="token-search-item" onclick="selectTokenSearch('${t.symbol}')">
-        <span class="tsi-sym">${t.symbol}</span><span class="tsi-price">${fmtPrice(t.price)}</span>
+        <span class="token-icon-row">${tokenIconHtml(t, 18)}<span class="tsi-sym">${t.symbol}</span></span><span class="tsi-price">${fmtPrice(t.price)}</span>
       </div>`
     ).join('');
   }
@@ -6247,18 +6296,21 @@ function renderTokenDetailBody(symbol){
   const body = document.getElementById('tdpBody');
   const symEl = document.getElementById('tdpSym');
   const priceEl = document.getElementById('tdpPrice');
+  const iconEl = document.getElementById('tdpIcon');
   const minSummary = document.getElementById('tdpMinSummary');
   if(!body) return;
 
   if(!token){
     symEl.textContent = symbol;
     priceEl.textContent = '—';
+    if(iconEl) iconEl.innerHTML = '';
     body.innerHTML = '<div class="tdp-empty-mini">Not found in the current scan — try Scan Now first.</div>';
     return;
   }
 
   symEl.textContent = token.symbol;
   priceEl.textContent = fmtPrice(token.price);
+  if(iconEl) iconEl.innerHTML = tokenIconHtml(token, 20);
 
   const r = token.rangeData;
   const ob = obRaw.find(o => o.symbol === symbol);

@@ -298,7 +298,7 @@ async function fetchTop100ByMarketCap(n) {
 
     included.push({
       symbol: sym, name: coin.name, price: ex.price, change24h: ex.change24h, volume: ex.volume, source: ex.source,
-      marketCap: coin.market_cap, marketCapRank: coin.market_cap_rank
+      marketCap: coin.market_cap, marketCapRank: coin.market_cap_rank, icon: coin.image || null
     });
   }
 
