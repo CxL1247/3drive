@@ -2258,6 +2258,10 @@ input.ctrl::placeholder { color: var(--text-3); }
   margin-bottom: var(--sp-2); padding-bottom: 4px; border-bottom: 1px solid var(--border2);
 }
 .tdp-row { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; font-family: var(--font-mono); font-size: 0.7rem; }
+.tdp-depth-wrap { margin-top: var(--sp-3); }
+.tdp-depth-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.tdp-depth-label { font-family: var(--font-ui); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-3); }
+#tdpDepthCanvas { width: 100%; height: 120px; display: block; border-radius: var(--r-sm); background: var(--bg3); }
 .tdp-row-label { color: var(--text-3); }
 .tdp-row-val { color: var(--text-2); font-weight: 600; }
 .tdp-row-val.pos { color: var(--green); }
@@ -6133,6 +6137,8 @@ function renderConfluence(){
 
 let tdpState = 'closed';   // 'closed' | 'normal' | 'min' | 'max'
 let tdpSymbol = null;
+let depthWs = null;        // dedicated per-symbol depth stream — only one open at a time, unlike the price ticker
+let depthWsSymbol = null;
 
 function findTokenBySymbol(sym){
   return tokenData.find(t => t.symbol === sym);
@@ -6182,12 +6188,117 @@ function openTokenDetail(symbol){
   popup.classList.remove('tdp-min','tdp-max');
   document.getElementById('tdpMinBtn').textContent = '—';
   renderTokenDetailBody(symbol);
+  startDepthStream(symbol);
 }
 
 function tdpClose(){
   document.getElementById('tokenDetailPopup').style.display = 'none';
   tdpSymbol = null;
   tdpState = 'closed';
+  stopDepthStream();
+}
+
+// Scoped to exactly one symbol at a time — unlike the price ticker (100 tokens at once,
+// snapshot-based), a single-symbol depth stream is cheap enough to genuinely stream live
+// while the popup is open, using Binance's partial-book-depth stream (top 20 levels each
+// side, pushed every 100ms). This is a nice-to-have visual, not core functionality, so
+// every failure path here fails silently — the rest of the popup keeps working either way.
+function startDepthStream(symbol){
+  stopDepthStream(); // only one depth stream open at a time
+  depthWsSymbol = symbol;
+  try {
+    depthWs = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}usdt@depth20@100ms`);
+    depthWs.onopen = () => {
+      const dot = document.getElementById('tdpDepthDot');
+      if(dot) dot.classList.add('active');
+    };
+    depthWs.onmessage = (evt) => {
+      try {
+        const data = JSON.parse(evt.data);
+        if(!data.bids || !data.asks) return;
+        const bids = data.bids.map(([p,s]) => [parseFloat(p), parseFloat(s)]).filter(([,s]) => s > 0);
+        const asks = data.asks.map(([p,s]) => [parseFloat(p), parseFloat(s)]).filter(([,s]) => s > 0);
+        drawDepthChart(bids, asks);
+      } catch(e){ /* one bad frame shouldn't kill the stream */ }
+    };
+    depthWs.onerror = () => { try{ depthWs.close(); }catch(e){} };
+  } catch(e){ /* depth chart is a visual extra — fail silently */ }
+}
+
+function stopDepthStream(){
+  if(depthWs){ try{ depthWs.close(); }catch(e){} depthWs = null; }
+  depthWsSymbol = null;
+}
+
+// Classic mirrored depth chart: cumulative resting volume, green bids filling outward to
+// the left of current price, red asks filling outward to the right — a tall, steep step is
+// a visible wall. Canvas conventions (DPI-naive sizing, dark/light-aware colors, 9px mono
+// labels) match drawMiniChart elsewhere in the app for visual consistency.
+function drawDepthChart(bids, asks){
+  const canvas = document.getElementById('tdpDepthCanvas');
+  if(!canvas || !bids.length || !asks.length) return;
+  const dot = document.getElementById('tdpDepthDot');
+  if(dot) dot.classList.add('active'); // re-assert every draw — the popup body can get rebuilt mid-stream
+  const W = canvas.parentElement.clientWidth;
+  const H = 120;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  if(!ctx) return;
+
+  const isDark = document.documentElement.classList.contains('dark') ||
+    window.matchMedia('(prefers-color-scheme:dark)').matches;
+  const textCol = isDark ? '#777' : '#999';
+  const gridCol = isDark ? '#222' : '#eee';
+
+  // bids arrive sorted descending (best/highest first), asks ascending (best/lowest
+  // first) — this is Binance's partial-depth format as-is, no re-sorting needed.
+  let cum = 0;
+  const bidCum = bids.map(([p,s]) => { cum += s; return [p, cum]; });
+  cum = 0;
+  const askCum = asks.map(([p,s]) => { cum += s; return [p, cum]; });
+
+  const minPrice = bidCum[bidCum.length-1][0];
+  const maxPrice = askCum[askCum.length-1][0];
+  const maxCum = Math.max(bidCum[bidCum.length-1][1], askCum[askCum.length-1][1]);
+  if(!(maxPrice > minPrice) || !(maxCum > 0)) return;
+
+  const padTop = 8, padBottom = 16;
+  const toX = p => ((p - minPrice) / (maxPrice - minPrice)) * W;
+  const toY = c => padTop + (1 - c/maxCum) * (H - padTop - padBottom);
+
+  ctx.clearRect(0, 0, W, H);
+
+  ctx.strokeStyle = gridCol; ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(0, H-padBottom); ctx.lineTo(W, H-padBottom); ctx.stroke();
+
+  function drawSide(cumArr, fillStyle, strokeStyle){
+    ctx.beginPath();
+    ctx.moveTo(toX(cumArr[0][0]), H-padBottom);
+    for(const [p,c] of cumArr) ctx.lineTo(toX(p), toY(c));
+    ctx.lineTo(toX(cumArr[cumArr.length-1][0]), H-padBottom);
+    ctx.closePath();
+    ctx.fillStyle = fillStyle;
+    ctx.fill();
+    ctx.strokeStyle = strokeStyle; ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(toX(cumArr[0][0]), toY(cumArr[0][1]));
+    for(const [p,c] of cumArr) ctx.lineTo(toX(p), toY(c));
+    ctx.stroke();
+  }
+  drawSide(bidCum, 'rgba(0,229,160,0.25)', '#00e5a0');
+  drawSide(askCum, 'rgba(255,61,104,0.25)', '#ff3d68');
+
+  // current price marker — midpoint between best bid and best ask
+  const mid = (bidCum[0][0] + askCum[0][0]) / 2;
+  const midX = toX(mid);
+  ctx.strokeStyle = textCol; ctx.lineWidth = 1; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(midX, padTop); ctx.lineTo(midX, H-padBottom); ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = textCol; ctx.font = '9px monospace';
+  ctx.textAlign = 'left';   ctx.fillText(fmtPrice(minPrice), 2, H-3);
+  ctx.textAlign = 'center'; ctx.fillText(fmtPrice(mid), midX, H-3);
+  ctx.textAlign = 'right';  ctx.fillText(fmtPrice(maxPrice), W-2, H-3);
 }
 
 function tdpToggleMinimize(){
@@ -6288,7 +6399,13 @@ function tdpOrderbookSectionHtml(symbol){
     <div class="tdp-row"><span class="tdp-row-label">Imbalance</span><span class="tdp-row-val ${pos?'pos':'neg'}">${pos?'+':''}${(ob.imbalance*100).toFixed(0)}%</span></div>
     <div class="tdp-row"><span class="tdp-row-label">Bid wall</span><span class="tdp-row-val ${ob.wallConfirmed===false?'neg':ob.wallConfirmed===true?'pos':''}">${wallVal(ob.bidWallPrice, ob.bidWallVolPct, ob.wallConfirmed)}</span></div>
     <div class="tdp-row"><span class="tdp-row-label">Ask wall</span><span class="tdp-row-val ${ob.wallConfirmed===false?'neg':ob.wallConfirmed===true?'pos':''}">${wallVal(ob.askWallPrice, ob.askWallVolPct, ob.wallConfirmed)}</span></div>
-    <div class="tdp-row"><span class="tdp-row-label">Source</span><span class="tdp-row-val">${obSourceLabel(ob.source)}</span></div>`;
+    <div class="tdp-row"><span class="tdp-row-label">Source</span><span class="tdp-row-val">${obSourceLabel(ob.source)}</span></div>
+    <div class="tdp-depth-wrap">
+      <div class="tdp-depth-header">
+        <span class="live-dot" id="tdpDepthDot"></span><span class="tdp-depth-label">live depth</span>
+      </div>
+      <canvas id="tdpDepthCanvas" height="120"></canvas>
+    </div>`;
 }
 
 function renderTokenDetailBody(symbol){
