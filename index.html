@@ -264,7 +264,10 @@ body {
   font-size: 0.58rem;
   color: var(--text-3);
   white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--t-fast), color var(--t-fast);
 }
+.live-status:hover { border-color: var(--blue); color: var(--blue); }
 .live-dot {
   width: 6px;
   height: 6px;
@@ -2342,7 +2345,7 @@ input.ctrl::placeholder { color: var(--text-3); }
     </div>
   </div>
   <div class="topbar-right">
-    <div class="live-status" id="liveStatus">
+    <div class="live-status" id="liveStatus" onclick="manualRefreshLivePrices()" title="Click to force-reconnect live prices" role="button" tabindex="0">
       <div id="liveDot" class="live-dot"></div>
       <span id="liveLabel" class="live-label" aria-live="polite">checking…</span>
     </div>
@@ -3687,6 +3690,9 @@ function updateStats(){
 
 // ── LIVE PRICES — WebSocket ──
 let ws = null;
+let lastPriceTick = 0;               // Date.now() of the last message received, of any symbol
+const WS_STALE_MS = 20000;           // ~20s with zero ticks on an "OPEN" socket = treat it as dead
+let wsWatchdogStarted = false;
 let _prevPrices = {};
 
 function updateHeaderPrice(sym, price, chg) {
@@ -3709,7 +3715,7 @@ function updateHeaderPrice(sym, price, chg) {
 
 function startLivePrices() {
   if(!tokenData.length) return;
-  if(ws){ try{ws.close();}catch(e){} }
+  if(ws){ ws.onclose = null; try{ws.close();}catch(e){} } // detach onclose first — otherwise it fires async and schedules a duplicate reconnect
   const streams = tokenData.map(t=>t.symbol.toLowerCase()+'usdt@miniTicker').join('/');
   try {
     ws = new WebSocket('wss://stream.binance.com:9443/stream?streams='+streams);
@@ -3720,6 +3726,9 @@ function startLivePrices() {
       log('Live prices connected','ok');
     };
     ws.onmessage = (evt) => {
+      lastPriceTick = Date.now(); // any message at all proves the connection is alive — track this
+                                   // before any early returns below, so a token whose price genuinely
+                                   // hasn't moved doesn't get misread as a dead connection.
       try {
         const tick = JSON.parse(evt.data).data;
         if(!tick||!tick.s) return;
@@ -3777,6 +3786,36 @@ function startLivePrices() {
     };
     ws.onerror = () => ws.close();
   } catch(e){ log('WebSocket unavailable','err'); }
+
+  lastPriceTick = Date.now(); // reset the clock on every (re)connect attempt, successful or not
+  if(!wsWatchdogStarted){
+    wsWatchdogStarted = true;
+    // A WebSocket can silently die — wifi drops, network handoffs, sleep/wake, a flaky VPN —
+    // without ever firing onclose/onerror, so ws.readyState keeps reporting OPEN while no data
+    // actually flows. That's "stuck on a particular number": the connection looks fine to the
+    // browser, it just isn't delivering anything. Binance's miniTicker stream pushes roughly
+    // once a second, so silence this long on a socket claiming to be open is the real signal —
+    // more reliable than trusting readyState alone, which is exactly what the earlier
+    // visibilitychange-only reconnect fix couldn't catch.
+    setInterval(() => {
+      if(!ws) return;
+      if(Date.now() - lastPriceTick > WS_STALE_MS){
+        log('Live prices stale for 20s+ on a socket still reporting open — reconnecting','warn');
+        startLivePrices(); // handles detaching + closing the stale socket safely
+      }
+    }, 7000);
+  }
+}
+
+// Click-to-reconnect on the live-status pill — immediate manual override, no need to wait
+// out the watchdog's timeout window if you notice the price looks stuck before it does.
+function manualRefreshLivePrices(){
+  const label = document.getElementById('liveLabel');
+  const dot = document.getElementById('liveDot');
+  if(label) label.textContent = 'reconnecting…';
+  if(dot) dot.className = 'live-dot';
+  log('Manual live price refresh requested','ok');
+  startLivePrices(); // handles detaching + closing any existing socket safely
 }
 
 // animateStat defined above
