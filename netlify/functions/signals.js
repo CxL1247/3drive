@@ -109,6 +109,8 @@ function analyse(symbol, tf, series, anchors) {
   const fvgs = D.detectFVGs(closes, highs, lows, approxOpens);
   const squeeze = D.calcBBSqueeze(closes);
   const volStatus = D.classifyVolumeStatus(closes, highs, lows, volumes);
+  // Trader XO Macro Trend (EMA 12/50 cross) on closed candles only — same function the UI runs.
+  const traderXO = D.detectTraderXO(closes, times, tf);
 
   const threeDrive = D.detect3Drive(closes, highs, lows, rsi, tf, times);
   if (threeDrive && threeDrive.signal !== 'none') {
@@ -135,6 +137,7 @@ function analyse(symbol, tf, series, anchors) {
     },
     squeeze,
     volStatus,
+    traderXO,
     srLevels,
   };
 }

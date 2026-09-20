@@ -2281,6 +2281,39 @@ input.ctrl::placeholder { color: var(--text-3); }
 .tdp-pattern-tag.bearish { background: var(--red-dim); color: var(--red); }
 .tdp-pattern-tag.squeeze { background: rgba(139,92,246,0.15); color: #8b5cf6; }
 
+/* ── Trader XO trend arrows: token popup rows + in-app toasts ── */
+.tdp-xo-sub { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-3); padding: 0 0 5px; line-height: 1.5; }
+.tdp-xo-sub .warn { color: var(--amber); }
+.tdp-xo-fresh { color: var(--amber); font-weight: 700; }
+.tdp-xo-note { font-family: var(--font-ui); font-size: 0.58rem; color: var(--text-3); font-style: italic; padding-top: 2px; }
+.xo-toasts {
+  position: fixed; left: var(--sp-4); bottom: var(--sp-4); z-index: 600;
+  display: flex; flex-direction: column-reverse; gap: var(--sp-2);
+  width: min(340px, calc(100vw - 2 * var(--sp-4))); pointer-events: none;
+}
+.xo-toast {
+  pointer-events: auto; cursor: pointer; display: flex; gap: var(--sp-3); align-items: flex-start;
+  background: var(--bg2); border: 1px solid var(--border); border-left: 3px solid var(--text-3);
+  border-radius: var(--r-lg); padding: var(--sp-3); box-shadow: var(--shadow-lg);
+  font-family: var(--font-mono); animation: xoToastIn 0.18s ease-out;
+}
+.xo-toast.bull { border-left-color: var(--green); }
+.xo-toast.bear { border-left-color: var(--red); }
+.xo-toast-main { flex: 1; min-width: 0; }
+.xo-toast-title { font-size: 0.72rem; font-weight: 700; color: var(--text); }
+.xo-toast.bull .xo-toast-dir { color: var(--green); }
+.xo-toast.bear .xo-toast-dir { color: var(--red); }
+.xo-toast-sub { font-size: 0.62rem; color: var(--text-3); margin-top: 3px; line-height: 1.45; }
+.xo-toast-x { background: none; border: none; color: var(--text-3); cursor: pointer; font-size: 0.85rem; line-height: 1; padding: 0 2px; }
+.xo-toast-x:hover { color: var(--text); }
+@keyframes xoToastIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .xo-toast { animation: none; } }
+.xo-hist-row { display: flex; gap: var(--sp-2); align-items: center; font-family: var(--font-mono); font-size: 0.64rem; color: var(--text-2); padding: 3px 0; }
+.xo-hist-row button { background: none; border: none; padding: 0; cursor: pointer; font: inherit; color: var(--text); font-weight: 700; }
+.xo-hist-row button:hover { color: var(--blue); }
+.xo-hist-row .when { color: var(--text-3); margin-left: auto; }
+
+
 /* Minimized: collapses to a slim header-only pill */
 .token-detail-popup.tdp-min { width: 240px; }
 .token-detail-popup.tdp-min .tdp-body { display: none; }
@@ -5176,6 +5209,11 @@ async function processTokenTF(token, tf) {
     if(!token.volStatus) token.volStatus = {};
     token.volStatus[tf] = classifyVolumeStatus(closes, ohlc.highs, ohlc.lows, ohlc.volumes);
 
+    // Trader XO Macro Trend (EMA 12/50) — trend state + the latest Bull/Bear arrow, on CLOSED
+    // candles only. Computed for every token/timeframe, independent of any 3-Drive pattern.
+    if(!token.xo) token.xo = {};
+    token.xo[tf] = detectTraderXO(closes, ohlc.times, tf);
+
     const result = detect3Drive(closes, ohlc.highs, ohlc.lows, rsi, tf, ohlc.times);
     if(result.signal !== 'none'){
       result.volumeSpike = checkVolumeSpike(ohlc.volumes, 1.5, 20, result.formationIdx);
@@ -5301,6 +5339,7 @@ async function startScan(){
     t.srConfluence = null;
     t.rangeData = null;
     t.fvgData = null;
+    t.xo = {};
     tfs.forEach(tf=>{ t.patterns[tf]=null; t.squeeze[tf]=null; });
   });
   renderTable();
@@ -5369,6 +5408,7 @@ async function startScan(){
   startLivePrices();
   buildTickerStrip();
   alertsAfterScan(tokenData);
+  xoAfterScan(tokenData); // Trader XO trend-shift arrows → in-app toast + desktop notification
   updateSignalHistory(tokenData);
   logSignalsForHitRate(tokenData); // log signals for hit rate tracking
   jAutoResolveOpenTrades(tokenData); // check open journal trades against live prices
@@ -6385,6 +6425,36 @@ function tdpPatternSectionHtml(token){
   return rows || '<div class="tdp-empty-mini">No active pattern signals this scan</div>';
 }
 
+// Trader XO Macro Trend — per-timeframe trend state plus how long ago the current trend's
+// arrow printed. The last arrow is by construction the flip INTO the current state, so
+// "turned bull 3h ago" and "the latest arrow" are the same fact.
+function tdpTrendSectionHtml(token){
+  const tfs = ['SIX_HOUR','ONE_HOUR','THIRTY_MINUTE'];
+  let any = false;
+  const rows = tfs.map(tf => {
+    const label = TF_LABELS[tf];
+    const xo = token.xo && token.xo[tf];
+    if(!xo) return `<div class="tdp-row"><span class="tdp-row-label">${label}</span><span class="tdp-row-val">—</span></div>`;
+    any = true;
+    const bull = xo.state === 'bull';
+    const a = xo.lastArrow;
+    let when = 'no cross in loaded history';
+    let fresh = false;
+    if(a && a.time != null){
+      const ago = Date.now() - (a.time + XO_TF_MS[tf]); // arrow prints when its candle CLOSES
+      fresh = a.barsAgo <= 1;
+      when = `arrow ${xoFmtAgo(Math.max(0, ago))}`;
+    }
+    const subBits = [`EMA 12 vs 50 ${xo.spreadPct>=0?'+':''}${xo.spreadPct.toFixed(2)}%`];
+    if(xo.aboveMacro != null) subBits.push(xo.aboveMacro ? 'above EMA 200' : 'below EMA 200');
+    if(xo.choppy) subBits.push(`<span class="warn">⚠ ${xo.flipsInWindow} flips in ${XO_CHOP_WINDOW} candles</span>`);
+    return `<div class="tdp-row"><span class="tdp-row-label">${label}</span><div class="tdp-row-val"><span class="tdp-pattern-tag ${bull?'bullish':'bearish'}">${bull?'▲ BULL':'▼ BEAR'}</span> <span class="${fresh?'tdp-xo-fresh':''}">${when}</span></div></div>
+      <div class="tdp-xo-sub">${subBits.join(' · ')}</div>`;
+  }).join('');
+  if(!any) return '<div class="tdp-empty-mini">Not available — run a scan to populate</div>';
+  return rows + '<div class="tdp-xo-note">Closed candles only · fast 12 / slow 50 EMA on close</div>';
+}
+
 function tdpRSISectionHtml(symbol, token){
   const rsiEntry = rsiRaw.find(r => r.symbol === symbol);
   const rsi1h = rsiEntry ? rsiEntry.rsi1h : (token.rsi && token.rsi.ONE_HOUR);
@@ -6473,6 +6543,8 @@ function renderTokenDetailBody(symbol){
   const ob = obRaw.find(o => o.symbol === symbol);
   if(minSummary){
     const bits = [];
+    const xo4 = token.xo && token.xo.SIX_HOUR, xo1 = token.xo && token.xo.ONE_HOUR;
+    if(xo4 || xo1) bits.push([xo4 && `4H ${xo4.state==='bull'?'▲':'▼'}`, xo1 && `1H ${xo1.state==='bull'?'▲':'▼'}`].filter(Boolean).join(' '));
     if(r) bits.push(r.state.replace(/-/g,' '));
     if(ob) bits.push(`${ob.imbalance>=0?'+':''}${(ob.imbalance*100).toFixed(0)}% book`);
     minSummary.textContent = bits.join(' · ');
@@ -6480,6 +6552,7 @@ function renderTokenDetailBody(symbol){
 
   body.innerHTML = `
     <div class="tdp-section"><div class="tdp-section-title">Pattern</div>${tdpPatternSectionHtml(token)}</div>
+    <div class="tdp-section"><div class="tdp-section-title">Trend (Trader XO)</div>${tdpTrendSectionHtml(token)}</div>
     <div class="tdp-section"><div class="tdp-section-title">RSI</div>${tdpRSISectionHtml(symbol, token)}</div>
     <div class="tdp-section"><div class="tdp-section-title">Range (FRVP)</div>${tdpRangeSectionHtml(token)}</div>
     <div class="tdp-section"><div class="tdp-section-title">Order Book</div>${tdpOrderbookSectionHtml(symbol)}</div>
@@ -7630,14 +7703,44 @@ document.addEventListener('keydown', function(e){
 
 
 
+<div class="xo-toasts" id="xoToasts" role="region" aria-live="polite" aria-label="Trend shift notifications"></div>
+
 <!-- ALERTS MODAL -->
 <div class="journal-overlay" id="alertsOverlay" onclick="if(event.target===this)closeAlerts()">
-  <div class="journal-panel" style="max-width:480px" role="dialog" aria-modal="true" aria-label="Email alerts">
+  <div class="journal-panel" style="max-width:480px" role="dialog" aria-modal="true" aria-label="Alerts">
     <div class="journal-header">
-      <div class="journal-title">🔔 EMAIL ALERTS</div>
-      <button class="journal-close" onclick="closeAlerts()" aria-label="Close email alerts">✕</button>
+      <div class="journal-title">🔔 ALERTS</div>
+      <button class="journal-close" onclick="closeAlerts()" aria-label="Close alerts">✕</button>
     </div>
     <div style="padding:var(--sp-4);display:flex;flex-direction:column;gap:var(--sp-4)">
+
+      <!-- Trend shifts — Trader XO (in-app + desktop, no email) -->
+      <div>
+        <div style="font-family:var(--font-mono);font-size:0.6rem;color:var(--text-3);letter-spacing:1.5px;margin-bottom:var(--sp-2)">TREND SHIFTS · TRADER XO (EMA 12 / 50)</div>
+        <div style="display:flex;flex-direction:column;gap:var(--sp-2)">
+          <label style="display:flex;align-items:center;gap:var(--sp-2);font-family:var(--font-mono);font-size:0.7rem;color:var(--text-2);cursor:pointer">
+            <input type="checkbox" id="xoEnabled" onchange="xoSaveSettingsFromUI()" style="accent-color:var(--blue)"> Notify me when a Bull / Bear arrow prints
+          </label>
+          <div style="display:flex;gap:var(--sp-4);flex-wrap:wrap;padding-left:22px">
+            <label style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:0.68rem;color:var(--text-2);cursor:pointer"><input type="checkbox" id="xoTf4h" onchange="xoSaveSettingsFromUI()" style="accent-color:var(--blue)"> 4H</label>
+            <label style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:0.68rem;color:var(--text-2);cursor:pointer"><input type="checkbox" id="xoTf1h" onchange="xoSaveSettingsFromUI()" style="accent-color:var(--blue)"> 1H</label>
+            <label style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:0.68rem;color:var(--text-2);cursor:pointer"><input type="checkbox" id="xoTf30m" onchange="xoSaveSettingsFromUI()" style="accent-color:var(--blue)"> 30M</label>
+          </div>
+          <label style="display:flex;align-items:center;gap:var(--sp-2);font-family:var(--font-mono);font-size:0.7rem;color:var(--text-2);cursor:pointer">
+            <input type="checkbox" id="xoDesktop" onchange="xoSaveSettingsFromUI()" style="accent-color:var(--blue)"> Also show as a desktop notification
+          </label>
+          <div style="display:flex;gap:var(--sp-2);align-items:center;flex-wrap:wrap">
+            <button class="journal-btn" id="xoEnableBtn" onclick="xoEnableDesktop()">enable desktop notifications</button>
+            <button class="journal-btn" onclick="xoSendTest()">send test</button>
+          </div>
+          <div id="xoDesktopStatus" style="font-family:var(--font-mono);font-size:0.6rem;color:var(--text-3)" aria-live="polite"></div>
+          <div id="xoAutoScanWarn" style="display:none;font-family:var(--font-mono);font-size:0.6rem;color:var(--amber)">⚠ Auto-scan is off — arrows are only checked when you press Scan Now.</div>
+          <div style="font-family:var(--font-ui);font-size:0.6rem;color:var(--text-3);line-height:1.5">Arrows are checked on closed candles at the end of every scan, so this only works while the app is open and auto-scan is on. 4H and 1H are on by default; 30M is opt-in because it fires a lot more often.</div>
+          <div id="xoHistory"></div>
+        </div>
+      </div>
+
+      <div style="height:1px;background:var(--border)"></div>
 
       <!-- Email input -->
       <div>
@@ -7725,10 +7828,231 @@ function openAlerts(){
   document.getElementById('alertOnSqueeze').checked = !!s.onSqueeze;
   document.getElementById('alertOnConfluence').checked = !!s.onConfluence;
   if(s.lastSent) document.getElementById('alertLastSent').textContent = 'Last sent: '+new Date(s.lastSent).toLocaleString();
+  xoRenderSettings();
   document.getElementById('alertsOverlay').classList.add('open');
   openModalA11y('alertsOverlay');
 }
 function closeAlerts(){ document.getElementById('alertsOverlay').classList.remove('open'); closeModalA11y('alertsOverlay'); }
+
+// ══════════════════════════════════════════════════════════
+// TREND SHIFT NOTIFICATIONS — Trader XO Macro Trend arrows
+// In-app toast + (optional) desktop notification. No email involved.
+//
+// An arrow is a closed-candle EMA 12/50 cross (see detectTraderXO). After each scan we compare
+// every token/timeframe's latest arrow against the last one we already reported (persisted, so
+// a reload doesn't re-announce) and deliver only the NEW ones. The very first scan after this
+// ships just records the current arrows as the baseline — otherwise the first scan would
+// announce every arrow that already existed.
+// ══════════════════════════════════════════════════════════
+const XO_SETTINGS_KEY = '3drive_xo_settings_v1';
+const XO_SEEN_KEY     = '3drive_xo_seen_v1';
+const XO_HISTORY_KEY  = '3drive_xo_history_v1';
+const XO_NOTIFY_MAX_BARS = 2;        // an arrow older than this many candles is stale news…
+const XO_CHOP_WINDOW = DETECTOR_CONSTANTS.XO_CHOP_WINDOW; // for the "N flips in M candles" label
+const XO_TOAST_MS = 45000;
+const XO_TFS = ['SIX_HOUR','ONE_HOUR','THIRTY_MINUTE'];
+const XO_TF_UI = { SIX_HOUR:'xoTf4h', ONE_HOUR:'xoTf1h', THIRTY_MINUTE:'xoTf30m' };
+
+function xoLoadSettings(){
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(XO_SETTINGS_KEY) || '{}') || {}; } catch(e){}
+  const t = s.tfs || {};
+  return {
+    enabled: s.enabled !== false,
+    desktop: s.desktop !== false,
+    tfs: { SIX_HOUR: t.SIX_HOUR !== false, ONE_HOUR: t.ONE_HOUR !== false, THIRTY_MINUTE: !!t.THIRTY_MINUTE }
+  };
+}
+function xoSaveSettingsFromUI(){
+  const s = {
+    enabled: document.getElementById('xoEnabled').checked,
+    desktop: document.getElementById('xoDesktop').checked,
+    tfs: {}
+  };
+  XO_TFS.forEach(tf => { s.tfs[tf] = document.getElementById(XO_TF_UI[tf]).checked; });
+  try { localStorage.setItem(XO_SETTINGS_KEY, JSON.stringify(s)); } catch(e){}
+}
+function xoLoadSeen(){
+  try {
+    const d = JSON.parse(localStorage.getItem(XO_SEEN_KEY) || '{}') || {};
+    return { init: !!d.init, seen: d.seen || {} };
+  } catch(e){ return { init:false, seen:{} }; }
+}
+function xoSaveSeen(d){
+  // drop entries older than 30 days so the map can't grow forever as the top-N list churns
+  const cutoff = Date.now() - 30*86400000;
+  Object.keys(d.seen).forEach(k => { if(d.seen[k] < cutoff) delete d.seen[k]; });
+  try { localStorage.setItem(XO_SEEN_KEY, JSON.stringify(d)); } catch(e){}
+}
+function xoLoadHistory(){
+  try { const h = JSON.parse(localStorage.getItem(XO_HISTORY_KEY) || '[]'); return Array.isArray(h) ? h : []; } catch(e){ return []; }
+}
+function xoPushHistory(items){
+  const h = items.map(i => ({ symbol:i.symbol, tf:i.tf, dir:i.dir, time:i.time, price:i.price, at:Date.now() })).concat(xoLoadHistory()).slice(0, 60);
+  try { localStorage.setItem(XO_HISTORY_KEY, JSON.stringify(h)); } catch(e){}
+}
+
+function xoFmtAgo(ms){
+  const m = Math.floor(ms / 60000);
+  if(m < 1) return 'just now';
+  if(m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if(h < 24) return h + 'h' + (m % 60 ? ' ' + (m % 60) + 'm' : '') + ' ago';
+  const d = Math.floor(h / 24);
+  return d + 'd' + (h % 24 ? ' ' + (h % 24) + 'h' : '') + ' ago';
+}
+
+// Called at the end of every scan. Delivers only arrows we haven't reported yet.
+function xoAfterScan(results){
+  try {
+    const s = xoLoadSettings();
+    const store = xoLoadSeen();
+    const baseline = !store.init;
+    const intervalMs = (document.getElementById('arEnabled')?.checked ? parseInt(document.getElementById('arInterval')?.value) || 0 : 0) * 1000;
+    const now = Date.now();
+    const fresh = [];
+    let sawAny = false;
+
+    for(const t of results){
+      for(const tf of XO_TFS){
+        const xo = t.xo && t.xo[tf];
+        if(!xo) continue;
+        sawAny = true;
+        const a = xo.lastArrow;
+        if(!a || a.time == null) continue;
+        const key = t.symbol + ':' + tf;
+        if(a.time <= (store.seen[key] || 0)) continue;   // already reported (or older)
+        store.seen[key] = a.time;                         // mark first, whatever we decide below
+        if(baseline || !s.enabled || !s.tfs[tf]) continue;
+        // Stale check: judged by wall-clock, so a slow auto-scan interval doesn't swallow real arrows.
+        const tfMs = XO_TF_MS[tf];
+        const age = now - (a.time + tfMs);
+        if(age > Math.max(XO_NOTIFY_MAX_BARS * tfMs, intervalMs * 1.25)) continue;
+        fresh.push({ symbol:t.symbol, rank:t.rank||999, tf, dir:a.dir, time:a.time, price:a.price, age });
+      }
+    }
+    if(sawAny){ store.init = true; xoSaveSeen(store); }
+    if(!fresh.length) return;
+    fresh.sort((x,y) => XO_TFS.indexOf(x.tf) - XO_TFS.indexOf(y.tf) || x.rank - y.rank);
+    fresh.forEach(f => log(`Trend arrow: ${f.symbol} [${TF_LABELS[f.tf]}] ${f.dir==='bull'?'BULL ▲':'BEAR ▼'} — EMA 12 crossed ${f.dir==='bull'?'above':'below'} EMA 50`, f.dir==='bull'?'ok':'warn'));
+    xoDeliver(fresh);
+  } catch(e){ /* notifications are a convenience — never let them break a scan */ }
+}
+
+function xoDeliver(items, opts){
+  opts = opts || {};
+  const s = xoLoadSettings();
+  if(!opts.test) xoPushHistory(items);
+  const MAX_TOASTS = 5;
+  items.slice(0, MAX_TOASTS).forEach(xoShowToast);
+  if(items.length > MAX_TOASTS) xoShowSummaryToast(items.length - MAX_TOASTS);
+
+  if(s.desktop && 'Notification' in window && Notification.permission === 'granted'){
+    try {
+      if(items.length <= 3){
+        items.forEach(i => {
+          const n = new Notification(`${i.dir==='bull'?'▲':'▼'} ${i.symbol} · ${TF_LABELS[i.tf]} trend turned ${i.dir==='bull'?'BULL':'BEAR'}`, {
+            body: `EMA 12 crossed ${i.dir==='bull'?'above':'below'} EMA 50 at ${fmtPrice(i.price)}${opts.test?' (test)':''}`,
+            tag: `xo-${i.symbol}-${i.tf}-${i.time}`
+          });
+          n.onclick = () => { window.focus(); n.close(); if(!opts.test) openTokenDetail(i.symbol); };
+        });
+      } else {
+        const list = items.slice(0, 6).map(i => `${i.dir==='bull'?'▲':'▼'} ${i.symbol} ${TF_LABELS[i.tf]}`).join(' · ');
+        const n = new Notification(`${items.length} trend shifts`, { body: list + (items.length > 6 ? ` · +${items.length-6} more` : ''), tag: 'xo-summary' });
+        n.onclick = () => { window.focus(); n.close(); };
+      }
+    } catch(e){ /* some browsers only allow notifications from a service worker — toasts still work */ }
+  }
+}
+
+function xoShowToast(i){
+  const box = document.getElementById('xoToasts');
+  if(!box) return;
+  const el = document.createElement('div');
+  el.className = 'xo-toast ' + (i.dir === 'bull' ? 'bull' : 'bear');
+  const main = document.createElement('div'); main.className = 'xo-toast-main';
+  const title = document.createElement('div'); title.className = 'xo-toast-title';
+  const dir = document.createElement('span'); dir.className = 'xo-toast-dir';
+  dir.textContent = i.dir === 'bull' ? '▲ BULL' : '▼ BEAR';
+  title.append(dir, ` · ${i.symbol} · ${TF_LABELS[i.tf]}`);
+  const sub = document.createElement('div'); sub.className = 'xo-toast-sub';
+  sub.textContent = `EMA 12 crossed ${i.dir==='bull'?'above':'below'} EMA 50 · ${fmtPrice(i.price)} · candle closed ${i.age != null ? xoFmtAgo(Math.max(0, i.age)) : 'just now'}`;
+  main.append(title, sub);
+  const x = document.createElement('button'); x.className = 'xo-toast-x'; x.type = 'button'; x.setAttribute('aria-label', 'Dismiss'); x.textContent = '✕';
+  el.append(main, x);
+  const kill = () => { clearTimeout(timer); el.remove(); };
+  const timer = setTimeout(kill, XO_TOAST_MS);
+  x.addEventListener('click', e => { e.stopPropagation(); kill(); });
+  el.addEventListener('click', () => { if(!i.test) openTokenDetail(i.symbol); kill(); });
+  box.appendChild(el);
+}
+function xoShowSummaryToast(n){
+  const box = document.getElementById('xoToasts');
+  if(!box) return;
+  const el = document.createElement('div');
+  el.className = 'xo-toast';
+  const main = document.createElement('div'); main.className = 'xo-toast-main';
+  const title = document.createElement('div'); title.className = 'xo-toast-title'; title.textContent = `+${n} more trend shift${n>1?'s':''}`;
+  const sub = document.createElement('div'); sub.className = 'xo-toast-sub'; sub.textContent = 'Open Alerts to see the full list';
+  main.append(title, sub);
+  const x = document.createElement('button'); x.className = 'xo-toast-x'; x.type = 'button'; x.setAttribute('aria-label', 'Dismiss'); x.textContent = '✕';
+  el.append(main, x);
+  const kill = () => { clearTimeout(timer); el.remove(); };
+  const timer = setTimeout(kill, XO_TOAST_MS);
+  x.addEventListener('click', e => { e.stopPropagation(); kill(); });
+  el.addEventListener('click', () => { openAlerts(); kill(); });
+  box.appendChild(el);
+}
+
+async function xoEnableDesktop(){
+  const st = document.getElementById('xoDesktopStatus');
+  if(!('Notification' in window)){ st.textContent = 'This browser does not support desktop notifications — in-app popups still work.'; return; }
+  try { await Notification.requestPermission(); } catch(e){}
+  xoRenderDesktopStatus();
+}
+function xoRenderDesktopStatus(){
+  const st = document.getElementById('xoDesktopStatus');
+  const btn = document.getElementById('xoEnableBtn');
+  if(!st || !btn) return;
+  if(!('Notification' in window)){ st.textContent = 'Desktop notifications aren’t supported here — in-app popups still work.'; btn.style.display = 'none'; return; }
+  const p = Notification.permission;
+  btn.style.display = p === 'granted' ? 'none' : '';
+  st.style.color = p === 'granted' ? 'var(--green)' : p === 'denied' ? 'var(--red)' : 'var(--text-3)';
+  st.textContent = p === 'granted' ? '✓ Desktop notifications are on'
+    : p === 'denied' ? '✗ Blocked — allow notifications for this site in your browser settings, then reopen this panel'
+    : 'Desktop notifications are not enabled yet — in-app popups work either way';
+}
+function xoSendTest(){
+  xoDeliver([{ symbol:'BTC', tf:'SIX_HOUR', dir:'bull', time:Date.now(), price:(findTokenBySymbol('BTC')||{}).price || 100000, age:0, test:true }], { test:true });
+}
+function xoRenderSettings(){
+  const s = xoLoadSettings();
+  document.getElementById('xoEnabled').checked = s.enabled;
+  document.getElementById('xoDesktop').checked = s.desktop;
+  XO_TFS.forEach(tf => { document.getElementById(XO_TF_UI[tf]).checked = !!s.tfs[tf]; });
+  xoRenderDesktopStatus();
+  const warn = document.getElementById('xoAutoScanWarn');
+  if(warn) warn.style.display = document.getElementById('arEnabled')?.checked ? 'none' : 'block';
+  const box = document.getElementById('xoHistory');
+  box.textContent = '';
+  const hist = xoLoadHistory().slice(0, 12);
+  if(!hist.length) return;
+  const head = document.createElement('div');
+  head.style.cssText = 'font-family:var(--font-mono);font-size:0.6rem;color:var(--text-3);letter-spacing:1.5px;margin:var(--sp-2) 0 2px';
+  head.textContent = 'RECENT ARROWS';
+  box.appendChild(head);
+  hist.forEach(h => {
+    const row = document.createElement('div'); row.className = 'xo-hist-row';
+    const d = document.createElement('span'); d.style.color = h.dir === 'bull' ? 'var(--green)' : 'var(--red)'; d.textContent = h.dir === 'bull' ? '▲' : '▼';
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = h.symbol;
+    b.addEventListener('click', () => { closeAlerts(); openTokenDetail(h.symbol); });
+    const tf = document.createElement('span'); tf.textContent = TF_LABELS[h.tf] || h.tf;
+    const w = document.createElement('span'); w.className = 'when'; w.textContent = xoFmtAgo(Date.now() - h.at);
+    row.append(d, b, tf, w);
+    box.appendChild(row);
+  });
+}
 
 async function alertSendTest(){
   const email = document.getElementById('alertEmail').value.trim();

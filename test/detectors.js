@@ -554,6 +554,74 @@ function rangeV2Tests() {
   check('agrees with detectRangeV2 for the same window',
     Math.abs(D.frvpFromAnchors(fx.h, fx.l, fx.v, r.window.p1Index, r.window.p2Index).vah - r.vah) < 1e-9);
 }
+// ── detectTraderXO ────────────────────────────────────────────────────────────
+function traderXOTests() {
+  console.log('\ndetectTraderXO');
+  const HOUR = 3600000;
+  const T0 = Date.UTC(2026, 0, 1);
+  const mk = (closes) => ({ closes, times: closes.map((_, i) => T0 + i * HOUR) });
+  // falling 100 -> ~70 over 120 bars, then rising for 60 bars: one bear regime, then a cross up
+  const closes = [];
+  for (let i = 0; i < 120; i++) closes.push(100 - i * 0.25);
+  for (let i = 0; i < 60; i++) closes.push(70 + i * 0.6);
+  const { times } = mk(closes);
+  const allClosedNow = times[times.length - 1] + HOUR;         // every candle closed
+  const r = D.detectTraderXO(closes, times, 'ONE_HOUR', allClosedNow);
+
+  check('returns a result with enough history', r !== null);
+  check('uptrend at the end reads BULL', r.state === 'bull' && r.fast > r.slow);
+  check('reports exactly the bear->bull cross as the latest arrow', r.lastArrow && r.lastArrow.dir === 'bull');
+  check('that arrow sits after the turn, not at the start of the series',
+    r.lastArrow.barsAgo < 60 && r.lastArrow.barsAgo > 0);
+  check('arrow price is the close of the crossing candle',
+    near(r.lastArrow.price, closes[closes.length - 1 - r.lastArrow.barsAgo]));
+
+  // an arrow is a state change: consecutive arrows must alternate direction
+  const alt = r.arrows.every((a, i, arr) => i === 0 || a.dir !== arr[i - 1].dir);
+  check('arrows alternate bull/bear (an arrow is a flip, never a repeat)', alt);
+
+  // forming candle: with "now" inside the last candle, that candle must be excluded
+  const midLast = times[times.length - 1] + HOUR / 2;
+  const rForming = D.detectTraderXO(closes, times, 'ONE_HOUR', midLast);
+  check('drops the still-forming candle', rForming.candlesUsed === closes.length - 1);
+  check('candle exactly at its close time counts as closed',
+    D.detectTraderXO(closes, times, 'ONE_HOUR', times[times.length - 1] + HOUR).candlesUsed === closes.length);
+
+  // the whole point of dropping it: a cross that exists only on the forming candle is not reported
+  const down = [];
+  for (let i = 0; i < 100; i++) down.push(100 - i * 0.2);
+  const base = down.concat([80, 80, 80, 80, 80, 80, 80, 80, 80, 80]);
+  const tb = base.map((_, i) => T0 + i * HOUR);
+  const spiked = base.concat([140]);
+  const ts = tb.concat([tb[tb.length - 1] + HOUR]);
+  const nowInSpike = ts[ts.length - 1] + 60000;                 // spike candle is 1 minute old
+  const closedOnly = D.detectTraderXO(base, tb, 'ONE_HOUR', tb[tb.length - 1] + HOUR);
+  const viaForming = D.detectTraderXO(spiked, ts, 'ONE_HOUR', nowInSpike);
+  const ifItHadClosed = D.detectTraderXO(spiked, ts, 'ONE_HOUR', ts[ts.length - 1] + HOUR);
+  check('control: had the spike candle closed, it WOULD flip the trend', ifItHadClosed.state === 'bull' && closedOnly.state === 'bear');
+  check('a spike on the forming candle does not flip the trend', viaForming.state === 'bear');
+  check('a spike on the forming candle does not create an arrow',
+    (viaForming.lastArrow ? viaForming.lastArrow.time : null) === (closedOnly.lastArrow ? closedOnly.lastArrow.time : null));
+
+  // degrade gracefully
+  check('too little history returns null', D.detectTraderXO(closes.slice(0, 30), times.slice(0, 30), 'ONE_HOUR') === null);
+  check('missing input returns null', D.detectTraderXO(null, null, 'ONE_HOUR') === null);
+  check('flat series has no arrows and no state', D.detectTraderXO(Array.from({ length: 100 }, () => 100), null, 'ONE_HOUR') === null);
+
+  // settings are honoured: a faster slow EMA crosses earlier than the 50
+  const r25 = D.detectTraderXO(closes, times, 'ONE_HOUR', allClosedNow, { slow: 25 });
+  check('slow EMA is configurable (25 crosses no later than 50)',
+    r25.lastArrow.barsAgo >= r.lastArrow.barsAgo);
+  check('defaults are the chart settings: 12 / 50', D.XO_FAST_EMA === 12 && D.XO_SLOW_EMA === 50 && r.params.slow === 50);
+
+  // chop flag: an oscillation around a flat mean crosses the two EMAs over and over
+  const osc = [];
+  for (let i = 0; i < 200; i++) osc.push(100 + 5 * Math.sin(2 * Math.PI * i / 12));
+  const rc = D.detectTraderXO(osc, osc.map((_, i) => T0 + i * HOUR), 'ONE_HOUR', T0 + 300 * HOUR);
+  check('oscillating series is flagged choppy', rc && rc.choppy === true && rc.flipsInWindow >= D.DETECTOR_CONSTANTS.XO_CHOP_FLIPS);
+  check('a clean trend is not flagged choppy', r.choppy === false);
+}
+
 volumeProfileTests();
 rsiTests();
 emaTests();
@@ -564,6 +632,7 @@ rangeV2Tests();
 fvgTests();
 adversarialTests();
 contractTests();
+traderXOTests();
 
 console.log(fails ? `\n${fails} FAILURE(S)` : '\nAll detector checks passed.');
 process.exit(fails ? 1 : 0);

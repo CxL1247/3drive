@@ -5,11 +5,12 @@ A real-time crypto scanner across the top 100 tokens by market cap — pattern d
 ## Tabs
 
 ### Scanner
-Detects four setups across 4H/1H/30M, continuously via auto-refresh:
+Detects four setups across 4H/1H/30M, continuously via auto-refresh, and reads the Trader XO trend state alongside them:
 - **Three Drives** — genuine harmonic structures using Fibonacci-proportional legs (not just "three higher highs"), confirmed by RSI divergence at each drive point
 - **Fair Value Gaps** — graded A/B, used as confluence for other signals
 - **Bollinger Band Squeeze** — volatility compression flagged as it happens
 - **Fixed Range Volume Profile / Range Deviation** — anchored at the exact swing pivot of a real impulsive move (not just the start of a search window), builds a real volume profile from that pivot to now, and derives VAH/POC/VAL. A catalyst move has to clear both a volatility-relative bar (vs. that token's own recent range) and a volume-confirmation bar before it counts — tuned against synthetic noise until false positives dropped under 1%. Every detected range gets a 0–100 quality score and A/B/C grade; anything scoring below 50 is filtered out entirely rather than shown.
+- **Trader XO Macro Trend (EMA 12 / 50)** — the `[@btc_charlie] Trader XO Macro Trend Scanner` as configured on the author's chart: fast EMA 12 vs slow EMA 50 on close. Trend is Bull while fast > slow, Bear while below, and an **arrow** is the cross itself. Evaluated on **closed candles only** (the still-forming candle is dropped), so an arrow can't appear and then vanish. Shown per timeframe (4H / 1H / 30M) in the token popup with how long ago the current trend's arrow printed, the EMA spread, price vs EMA 200, and a chop warning when the trend has flipped 3+ times in the last 20 candles. The script's own default slow EMA is 25 — change `XO_SLOW_EMA` in `src/detectors.js` (or pass `opts.slow`) to match a different chart.
 
 Each signal gets a composite confidence score (support/resistance confluence, FVG confluence, volume confirmation at the formation candle, the token's own historical hit rate), trend-context filtering (flags lower-timeframe signals fighting the 4H trend), and weekend liquidity flagging.
 
@@ -24,6 +25,16 @@ Real resting bid/ask depth per token — not leveraged positions, not predicted 
 
 ### Token Search
 Search any scanned token to open a floating popup combining Pattern, RSI, Range, and Order Book data for that one token in one place. Minimize to a summary pill, maximize to a larger panel, or close — price ticks live while open.
+
+## Trend-shift notifications
+
+When a Trader XO arrow prints on **4H or 1H** (30M is opt-in), the app shows an in-app popup and, if you've enabled them, a desktop notification. No email involved. Configure under **⋯ → Alerts → Trend shifts**.
+
+- Checked at the end of every scan, so it only works while the app is open and **auto-scan is on**; a 1H arrow is caught within one scan interval of its candle closing.
+- Only *new* arrows are announced. The last announced arrow per token/timeframe is remembered in localStorage, so reloads don't repeat, and the first scan after enabling just records a baseline instead of announcing every existing arrow.
+- An arrow older than two candles (or 1.25× your auto-scan interval, if longer) is treated as stale and recorded silently.
+- Bursts are collapsed: at most 5 popups plus a "+N more", and one summary desktop notification when more than 3 fire at once.
+- Desktop notifications need a one-time browser permission and a secure context (https or localhost). They don't work when the tab is closed — there is no push backend.
 
 ## Trading Journal
 Log trades (entry/SL/TP/leverage, R-multiple, scale-outs) and open trades get a live-tracked floating widget showing real-time P&L against SL/TP, independent of the current scan universe. Auto-resolves against live candles when TP/SL is hit.
@@ -46,7 +57,7 @@ through the proxy: **KuCoin, OKX, Binance, and Bybit** in parallel per request �
 - Detection math in `src/detectors.js`, a dependency-free script shared by the page, the tests, and the signals endpoint
 - Netlify Functions (`netlify/functions/proxy.js`) as a CORS proxy + exchange-race layer to the exchange APIs
 - Email alerts via a separate Netlify Function (`netlify/functions/send-alert.js`)
-- All data (journal, hit-rate history, settings, dismissed widgets) stored in browser localStorage — no backend database
+- All data (journal, hit-rate history, settings, trend-arrow history, dismissed widgets) stored in browser localStorage — no backend database
 
 ## Known limitations
 

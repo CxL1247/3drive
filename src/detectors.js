@@ -1340,6 +1340,85 @@ function resetDriveFunnel() {
 }
 function getDriveFunnel() { return _driveFunnel; }
 
+// ── Trader XO Macro Trend (EMA cross) ───────────────────────────────────────
+// Port of the [@btc_charlie] Trader XO Macro Trend Scanner, with the settings used on the
+// user's chart: Fast EMA 12 / Slow EMA 50 on close (the script's own default slow is 25, so
+// this is a deliberate override — pass opts.slow to compare). Trend is BULL while the fast EMA
+// sits above the slow one and BEAR while below. An ARROW is the first bar of a new state,
+// i.e. the cross itself.
+//
+// CLOSED candles only. The exchange feeds return the still-forming candle as the last row; a
+// cross on a candle that hasn't closed can un-cross before it does, so that candle is dropped
+// (decided from the candle's open time + the timeframe length, not assumed). This is what makes
+// an arrow safe to notify on: once reported, it cannot disappear.
+//
+// Returns null when there is not enough history for the slow EMA to have settled.
+var XO_FAST_EMA   = 12;
+var XO_SLOW_EMA   = 50;
+var XO_MACRO_EMA  = 200;   // context only — price vs EMA 200, not part of the arrow
+var XO_WARMUP     = 50;    // bars ignored at the start; EMAs are seeded from the first close
+var XO_MAX_ARROWS = 6;
+var XO_CHOP_WINDOW = 20;   // an arrow flips the state; this many flips in this many candles = chop
+var XO_CHOP_FLIPS  = 3;
+var XO_TF_MS = { SIX_HOUR: 4 * 3600000, ONE_HOUR: 3600000, THIRTY_MINUTE: 1800000, FIFTEEN_MINUTE: 900000 }; // SIX_HOUR is the app's key for 4H candles
+
+function detectTraderXO(closes, times, tfKey, nowMs, opts) {
+  opts = opts || {};
+  var fastP = opts.fast || XO_FAST_EMA;
+  var slowP = opts.slow || XO_SLOW_EMA;
+  if (!closes || closes.length < XO_WARMUP + 10) return null;
+
+  var n = closes.length;
+  var tfMs = XO_TF_MS[tfKey];
+  if (times && times.length === n && tfMs) {
+    var now = nowMs != null ? nowMs : Date.now();
+    if (times[n - 1] + tfMs > now) n -= 1;          // last candle is still forming
+  }
+  if (n < XO_WARMUP + 10) return null;
+
+  var c = closes.slice(0, n);
+  var fast = calcEMA(c, fastP);
+  var slow = calcEMA(c, slowP);
+  if (fast.length !== n || slow.length !== n) return null;
+
+  var state = null;
+  var arrows = [];
+  for (var i = Math.max(slowP, XO_WARMUP); i < n; i++) {
+    var s = fast[i] > slow[i] ? 'bull' : fast[i] < slow[i] ? 'bear' : state; // exact tie keeps the trend
+    if (s === null) continue;
+    if (state !== null && s !== state) {
+      arrows.push({ dir: s, idx: i, time: times ? times[i] : null, price: c[i] });
+    }
+    state = s;
+  }
+  if (state === null) return null;
+
+  var last = n - 1;
+  var recent = arrows.slice(-XO_MAX_ARROWS).map(function (a) {
+    return { dir: a.dir, time: a.time, price: a.price, barsAgo: last - a.idx };
+  });
+  var flipsInWindow = arrows.filter(function (a) { return last - a.idx < XO_CHOP_WINDOW; }).length;
+  var macro = n >= XO_MACRO_EMA ? calcEMA(c, XO_MACRO_EMA) : [];
+  var ema200 = macro.length ? macro[macro.length - 1] : null;
+
+  return {
+    state: state,
+    fast: fast[last],
+    slow: slow[last],
+    spreadPct: (fast[last] - slow[last]) / slow[last] * 100,
+    price: c[last],
+    ema200: ema200,
+    aboveMacro: ema200 == null ? null : c[last] > ema200,
+    lastArrow: recent.length ? recent[recent.length - 1] : null,
+    arrows: recent,
+    flipsInWindow: flipsInWindow,
+    choppy: flipsInWindow >= XO_CHOP_FLIPS,
+    closedThrough: times ? times[last] : null,
+    candlesUsed: n,
+    params: { fast: fastP, slow: slowP }
+  };
+}
+
 var DETECTOR_CONSTANTS = Object.freeze({
   RANGE_V2_CATALYST_MIN_PCT: RANGE_V2_CATALYST_MIN_PCT,
   RANGE_V2_CATALYST_MAX_BARS: RANGE_V2_CATALYST_MAX_BARS,
@@ -1392,7 +1471,13 @@ var DETECTOR_CONSTANTS = Object.freeze({
   TREND_EMA_PERIOD: TREND_EMA_PERIOD,
   TREND_SLOPE_MIN: TREND_SLOPE_MIN,
   VALUE_AREA_PCT: VALUE_AREA_PCT,
-  VP_BUCKETS: VP_BUCKETS
+  VP_BUCKETS: VP_BUCKETS,
+  XO_FAST_EMA: XO_FAST_EMA,
+  XO_SLOW_EMA: XO_SLOW_EMA,
+  XO_MACRO_EMA: XO_MACRO_EMA,
+  XO_WARMUP: XO_WARMUP,
+  XO_CHOP_WINDOW: XO_CHOP_WINDOW,
+  XO_CHOP_FLIPS: XO_CHOP_FLIPS
 });
 
 return {
@@ -1404,6 +1489,7 @@ return {
   findExtremeIdx: findExtremeIdx,
   calcEMA: calcEMA,
   get4HTrend: get4HTrend,
+  detectTraderXO: detectTraderXO,
   checkVolumeSpike: checkVolumeSpike,
   checkVolumeDrought: checkVolumeDrought,
   checkVolumeMismatch: checkVolumeMismatch,
@@ -1477,6 +1563,10 @@ return {
   RANGE_V2_MIN_QUALITY: RANGE_V2_MIN_QUALITY,
   RANGE_V2_ENABLED_TFS: RANGE_V2_ENABLED_TFS,
   DETECTOR_CONSTANTS: DETECTOR_CONSTANTS,
+  XO_FAST_EMA: XO_FAST_EMA,
+  XO_SLOW_EMA: XO_SLOW_EMA,
+  XO_MACRO_EMA: XO_MACRO_EMA,
+  XO_TF_MS: XO_TF_MS,
   setLogger: setLogger,
   resetDriveFunnel: resetDriveFunnel,
   getDriveFunnel: getDriveFunnel
