@@ -28,7 +28,7 @@ Search any scanned token to open a floating popup combining Pattern, RSI, Range,
 
 ## Trend-shift notifications
 
-When a Trader XO arrow prints on **4H or 1H** (30M is opt-in), the app shows an in-app popup and, if you've enabled them, a desktop notification. No email involved. Configure under **⋯ → Alerts → Trend shifts**.
+When a Trader XO arrow prints on **4H or 1H** (30M is opt-in), the app shows an in-app popup and, if you've enabled them, a desktop notification. No email involved. Configure under **⋯ → Alerts → Trend shifts**, including a list of tokens to mute (or hit "mute" on any popup).
 
 - Checked at the end of every scan, so it only works while the app is open and **auto-scan is on**; a 1H arrow is caught within one scan interval of its candle closing.
 - Only *new* arrows are announced. The last announced arrow per token/timeframe is remembered in localStorage, so reloads don't repeat, and the first scan after enabling just records a baseline instead of announcing every existing arrow.

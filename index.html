@@ -2304,6 +2304,8 @@ input.ctrl::placeholder { color: var(--text-3); }
 .xo-toast.bull .xo-toast-dir { color: var(--green); }
 .xo-toast.bear .xo-toast-dir { color: var(--red); }
 .xo-toast-sub { font-size: 0.62rem; color: var(--text-3); margin-top: 3px; line-height: 1.45; }
+.xo-toast-mute { display: block; margin-top: 5px; background: none; border: none; padding: 0; cursor: pointer; font: inherit; font-size: 0.6rem; color: var(--text-3); text-decoration: underline; }
+.xo-toast-mute:hover { color: var(--text); }
 .xo-toast-x { background: none; border: none; color: var(--text-3); cursor: pointer; font-size: 0.85rem; line-height: 1; padding: 0 2px; }
 .xo-toast-x:hover { color: var(--text); }
 @keyframes xoToastIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -7729,6 +7731,13 @@ document.addEventListener('keydown', function(e){
           <label style="display:flex;align-items:center;gap:var(--sp-2);font-family:var(--font-mono);font-size:0.7rem;color:var(--text-2);cursor:pointer">
             <input type="checkbox" id="xoDesktop" onchange="xoSaveSettingsFromUI()" style="accent-color:var(--blue)"> Also show as a desktop notification
           </label>
+          <div>
+            <label for="xoMuted" style="display:block;font-family:var(--font-mono);font-size:0.6rem;color:var(--text-3);letter-spacing:1.5px;margin:var(--sp-1) 0 var(--sp-2)">MUTED TOKENS (NO TREND NOTIFICATIONS)</label>
+            <input id="xoMuted" type="text" placeholder="e.g. DOGE, SHIB, PEPE" autocomplete="off" spellcheck="false"
+              style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:0.72rem;padding:7px var(--sp-3);border-radius:var(--r-md);outline:none;text-transform:uppercase"
+              onchange="xoSaveSettingsFromUI();this.value=xoLoadSettings().muted.join(', ')">
+            <div style="font-family:var(--font-ui);font-size:0.58rem;color:var(--text-3);margin-top:4px">Comma-separated tickers. Muted tokens still show their trend in the token popup — only the notifications are skipped. You can also hit “mute” on any popup.</div>
+          </div>
           <div style="display:flex;gap:var(--sp-2);align-items:center;flex-wrap:wrap">
             <button class="journal-btn" id="xoEnableBtn" onclick="xoEnableDesktop()">enable desktop notifications</button>
             <button class="journal-btn" onclick="xoSendTest()">send test</button>
@@ -7860,14 +7869,27 @@ function xoLoadSettings(){
   return {
     enabled: s.enabled !== false,
     desktop: s.desktop !== false,
-    tfs: { SIX_HOUR: t.SIX_HOUR !== false, ONE_HOUR: t.ONE_HOUR !== false, THIRTY_MINUTE: !!t.THIRTY_MINUTE }
+    tfs: { SIX_HOUR: t.SIX_HOUR !== false, ONE_HOUR: t.ONE_HOUR !== false, THIRTY_MINUTE: !!t.THIRTY_MINUTE },
+    muted: xoParseSymbols(s.muted)
   };
+}
+// Symbols the user never wants arrow notifications for. Accepts an array or free text
+// ("doge, shib  pepe"); returns unique upper-case tickers.
+function xoParseSymbols(v){
+  const raw = Array.isArray(v) ? v : String(v || '').split(/[\s,;]+/);
+  const out = [];
+  raw.forEach(x => {
+    const sym = String(x).trim().toUpperCase();
+    if(/^[A-Z0-9]{1,15}$/.test(sym) && !out.includes(sym)) out.push(sym);
+  });
+  return out;
 }
 function xoSaveSettingsFromUI(){
   const s = {
     enabled: document.getElementById('xoEnabled').checked,
     desktop: document.getElementById('xoDesktop').checked,
-    tfs: {}
+    tfs: {},
+    muted: xoParseSymbols(document.getElementById('xoMuted').value)
   };
   XO_TFS.forEach(tf => { s.tfs[tf] = document.getElementById(XO_TF_UI[tf]).checked; });
   try { localStorage.setItem(XO_SETTINGS_KEY, JSON.stringify(s)); } catch(e){}
@@ -7923,7 +7945,7 @@ function xoAfterScan(results){
         const key = t.symbol + ':' + tf;
         if(a.time <= (store.seen[key] || 0)) continue;   // already reported (or older)
         store.seen[key] = a.time;                         // mark first, whatever we decide below
-        if(baseline || !s.enabled || !s.tfs[tf]) continue;
+        if(baseline || !s.enabled || !s.tfs[tf] || s.muted.includes(String(t.symbol).toUpperCase())) continue;
         // Stale check: judged by wall-clock, so a slow auto-scan interval doesn't swallow real arrows.
         const tfMs = XO_TF_MS[tf];
         const age = now - (a.time + tfMs);
@@ -7980,6 +8002,12 @@ function xoShowToast(i){
   sub.textContent = `EMA 12 crossed ${i.dir==='bull'?'above':'below'} EMA 50 · ${fmtPrice(i.price)} · candle closed ${i.age != null ? xoFmtAgo(Math.max(0, i.age)) : 'just now'}`;
   main.append(title, sub);
   const x = document.createElement('button'); x.className = 'xo-toast-x'; x.type = 'button'; x.setAttribute('aria-label', 'Dismiss'); x.textContent = '✕';
+  if(!i.test){
+    const mute = document.createElement('button'); mute.className = 'xo-toast-mute'; mute.type = 'button';
+    mute.textContent = `mute ${i.symbol}`; mute.title = 'Stop trend-shift notifications for this token';
+    mute.addEventListener('click', e => { e.stopPropagation(); xoMuteSymbol(i.symbol); kill(); });
+    main.appendChild(mute);
+  }
   el.append(main, x);
   const kill = () => { clearTimeout(timer); el.remove(); };
   const timer = setTimeout(kill, XO_TOAST_MS);
@@ -8003,6 +8031,15 @@ function xoShowSummaryToast(n){
   x.addEventListener('click', e => { e.stopPropagation(); kill(); });
   el.addEventListener('click', () => { openAlerts(); kill(); });
   box.appendChild(el);
+}
+
+function xoMuteSymbol(sym){
+  const s = xoLoadSettings();
+  const muted = xoParseSymbols(s.muted.concat([sym]));
+  s.muted = muted;
+  try { localStorage.setItem(XO_SETTINGS_KEY, JSON.stringify(s)); } catch(e){}
+  const inp = document.getElementById('xoMuted');
+  if(inp) inp.value = muted.join(', ');
 }
 
 async function xoEnableDesktop(){
@@ -8031,6 +8068,7 @@ function xoRenderSettings(){
   document.getElementById('xoEnabled').checked = s.enabled;
   document.getElementById('xoDesktop').checked = s.desktop;
   XO_TFS.forEach(tf => { document.getElementById(XO_TF_UI[tf]).checked = !!s.tfs[tf]; });
+  document.getElementById('xoMuted').value = s.muted.join(', ');
   xoRenderDesktopStatus();
   const warn = document.getElementById('xoAutoScanWarn');
   if(warn) warn.style.display = document.getElementById('arEnabled')?.checked ? 'none' : 'block';
