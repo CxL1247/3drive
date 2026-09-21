@@ -2363,7 +2363,7 @@ input.ctrl::placeholder { color: var(--text-3); }
 .al-row:first-child { border-top: none; }
 .al-row.al-sub { padding-top: 0; border-top: none; margin-top: calc(-1 * var(--sp-1)); }
 .al-row[hidden] { display: none; }
-.al-row-text { min-width: 0; flex: 1; }
+.al-row-text { min-width: 0; flex: 1 1 150px; }   /* 150px basis: on a phone a row's controls wrap underneath instead of squeezing the label to one word per line */
 .al-row-label { font-family: var(--font-ui); font-size: 0.78rem; font-weight: 600; color: var(--text); }
 .al-row-hint { font-family: var(--font-ui); font-size: 0.68rem; color: var(--text-2); margin-top: 2px; line-height: 1.4; }
 .al-row-hint.ok   { color: var(--green); }
@@ -6806,7 +6806,7 @@ function renderTokenDetailBody(symbol){
 
   body.innerHTML = `
     <div class="tdp-section"><div class="tdp-section-title">Pattern</div>${tdpPatternSectionHtml(token)}</div>
-    <div class="tdp-section"><div class="tdp-section-title">Trend (Trader XO)</div>${tdpTrendSectionHtml(token)}</div>
+    <div class="tdp-section"><div class="tdp-section-title">Trend (Trader XO)</div><div id="tdpTrendBody">${tdpTrendSectionHtml(token)}</div></div>
     <div class="tdp-section"><div class="tdp-section-title">RSI</div>${tdpRSISectionHtml(symbol, token)}</div>
     <div class="tdp-section"><div class="tdp-section-title">Range (FRVP)</div>${tdpRangeSectionHtml(token)}</div>
     <div class="tdp-section"><div class="tdp-section-title">Order Book</div>${tdpOrderbookSectionHtml(symbol)}</div>
@@ -7992,7 +7992,7 @@ document.addEventListener('keydown', function(e){
             <span class="al-track"></span>
           </label>
         </div>
-        <div class="al-banner warn" id="xoAutoScanWarn" style="display:none">Auto-scan is off, so arrows are only checked when you press Scan Now.</div>
+        <div class="al-banner warn" id="xoAutoScanWarn" style="display:none"></div>
 
         <div class="al-group" id="xoGroup">
           <div class="al-row">
@@ -8005,6 +8005,17 @@ document.addEventListener('keydown', function(e){
               <label class="al-chip"><input type="checkbox" id="xoTf1h" onchange="xoSaveSettingsFromUI()"><span>1H</span></label>
               <label class="al-chip"><input type="checkbox" id="xoTf30m" onchange="xoSaveSettingsFromUI()"><span>30M</span></label>
             </div>
+          </div>
+
+          <div class="al-row">
+            <div class="al-row-text">
+              <div class="al-row-label">Check at every candle close</div>
+              <div class="al-row-hint" id="xoWatchStatus"></div>
+            </div>
+            <label class="al-switch" title="Check for arrows a few seconds after each candle closes, without waiting for a scan">
+              <input type="checkbox" id="xoWatch" onchange="xoSaveSettingsFromUI()" aria-label="Check at every candle close">
+              <span class="al-track"></span>
+            </label>
           </div>
 
           <div class="al-row">
@@ -8075,7 +8086,7 @@ document.addEventListener('keydown', function(e){
           </div>
         </div>
 
-        <p class="al-foot">Checked at the end of every scan, so this only works while the app is open and auto-scan is on. Desktop notifications are silent on purpose; the sound option above is what makes noise.</p>
+        <p class="al-foot">Arrows are checked a few seconds after each candle closes, and again at the end of every scan. This only works while the app is open. Desktop notifications are silent on purpose; the sound option above is what makes noise.</p>
       </section>
 
       <!-- EMAIL ALERTS · 3-Drive / squeeze / confluence -->
@@ -8189,6 +8200,7 @@ function xoLoadSettings(){
   return {
     enabled: s.enabled !== false,
     desktop: s.desktop !== false,
+    watch: s.watch !== false,                                             // check at every candle close
     tfs: { SIX_HOUR: t.SIX_HOUR !== false, ONE_HOUR: t.ONE_HOUR !== false, THIRTY_MINUTE: !!t.THIRTY_MINUTE },
     muted: xoParseSymbols(s.muted),
     dayReset: /^([01]\d|2[0-3]):[0-5]\d$/.test(s.dayReset || '') ? s.dayReset : '00:00',   // where the trading day starts
@@ -8214,6 +8226,7 @@ function xoSaveSettingsFromUI(){
   const s = {
     enabled: document.getElementById('xoEnabled').checked,
     desktop: document.getElementById('xoDesktop').checked,
+    watch: document.getElementById('xoWatch').checked,
     tfs: {},
     muted: xoLoadSettings().muted,            // edited through the tag box, not read back from the DOM
     dayReset: document.getElementById('xoDayTime').value || '00:00',
@@ -8227,6 +8240,7 @@ function xoSaveSettingsFromUI(){
   xoSyncUi();
   xoScheduleDayReset();      // the reset moment may have moved
   xoUpdateBell();
+  xoRenderWatchStatus();
 }
 // Dependent controls: dim everything when the master switch is off, show sound options only when sound is on.
 function xoSyncUi(){
@@ -8368,11 +8382,13 @@ function xoAfterScan(results){
       }
     }
     if(sawAny){ store.init = true; xoSaveSeen(store); }
-    if(!fresh.length) return;
+    if(!fresh.length) return 0;
     fresh.sort((x,y) => XO_TFS.indexOf(x.tf) - XO_TFS.indexOf(y.tf) || x.rank - y.rank);
     fresh.forEach(f => log(`Trend arrow: ${f.symbol} [${TF_LABELS[f.tf]}] ${f.dir==='bull'?'BULL ▲':'BEAR ▼'} — EMA 12 crossed ${f.dir==='bull'?'above':'below'} EMA 50`, f.dir==='bull'?'ok':'warn'));
     xoDeliver(fresh);
+    return fresh.length;
   } catch(e){ /* notifications are a convenience — never let them break a scan */ }
+  return 0;
 }
 
 function xoDeliver(items, opts){
@@ -8628,7 +8644,8 @@ function xoRenderLog(){
 
   const notes = [];
   if(!s.enabled) notes.push('Trend notifications are off, so new arrows are not being logged.');
-  if(!document.getElementById('arEnabled')?.checked) notes.push('Auto-scan is off, so arrows are only checked when you press Scan Now.');
+  const cover = xoCoverageNote();
+  if(cover) notes.push(cover);
   const banner = document.getElementById('xoLogBanner');
   banner.style.display = notes.length ? 'block' : 'none';
   banner.textContent = notes.join(' ');
@@ -8665,6 +8682,128 @@ function xoRenderLog(){
     + 'Only arrows you were notified about are listed, so muted tokens and switched-off timeframes are left out.';
 }
 
+// ══════════════════════════════════════════════════════════
+// CANDLE-CLOSE WATCHER
+// An arrow can only exist when a candle closes, so instead of waiting for the next scan (up to the
+// whole auto-scan interval later) this checks a few seconds after every 4H / 1H / 30M close:
+// re-fetch just that timeframe for the tokens from the last scan, recompute the arrow, and hand the
+// tokens to the same delivery path a scan uses (same dedupe, mute list, log, sound). Still confirmed
+// closes only, so an arrow you were told about can't un-cross.
+//
+// Runs off a Web Worker heartbeat, like auto-scan, so a hidden tab doesn't throttle it. It needs the
+// token list from one scan, and it stands down while a scan is running.
+// ══════════════════════════════════════════════════════════
+const XO_WATCH_DELAY_MS = 6000;                       // let the exchange publish the closed candle first
+const XO_WATCH_RETRY_MS = [12000, 25000, 45000];      // if a token's candle still hasn't landed
+const XO_WATCH_BATCH = 5;                             // same concurrency the scan uses
+let xoWatchBusy = false, xoWatchWorker = null;
+const xoWatchDone = {};                               // tf -> latest candle boundary already handled
+const xoWatchInfo = { lastRun: 0, lastTfs: [], checked: 0, total: 0, arrows: 0 };
+
+function xoWatchStart(){
+  if(xoWatchWorker) return;
+  try {
+    const code = 'setInterval(function(){postMessage(1)},1000);';
+    xoWatchWorker = new Worker(URL.createObjectURL(new Blob([code], { type:'application/javascript' })));
+    xoWatchWorker.onmessage = xoWatchTick;
+  } catch(e){
+    xoWatchWorker = { fallback: setInterval(xoWatchTick, 1000) };
+  }
+}
+function xoWatchTick(){
+  if(xoWatchBusy || scanning) return;
+  const s = xoLoadSettings();
+  if(!s.enabled || !s.watch || !tokenData.length) return;
+  const now = Date.now(), due = [];
+  XO_TFS.forEach(tf => {
+    if(!s.tfs[tf]) return;
+    const ms = XO_TF_MS[tf], b = Math.floor(now / ms) * ms;      // the most recent close
+    if(xoWatchDone[tf] === undefined){ xoWatchDone[tf] = b; return; }   // first sight: the scan that just ran covers "now"
+    if(now >= b + XO_WATCH_DELAY_MS && xoWatchDone[tf] < b) due.push({ tf, b });
+  });
+  if(due.length) xoWatchRun(due);
+}
+// one token/timeframe → 'ok' (fresh data containing the candle that just closed), 'stale' (the
+// exchange answered but hasn't published that candle yet) or 'fail' (no usable answer)
+async function xoWatchCheck(job){
+  try {
+    const ohlc = await fetchCandles(job.t.productId, job.t.symbol, job.tf);
+    if(!(ohlc && ohlc.closes && ohlc.closes.length >= 60)) return 'fail';
+    const xo = detectTraderXO(ohlc.closes, ohlc.times, job.tf);
+    if(!xo) return 'fail';
+    if(xo.closedThrough == null || xo.closedThrough < job.b - XO_TF_MS[job.tf]) return 'stale';
+    if(!job.t.xo) job.t.xo = {};
+    job.t.xo[job.tf] = xo;
+    return 'ok';
+  } catch(e){ return 'fail'; }
+}
+async function xoWatchRun(due){
+  xoWatchBusy = true;
+  try {
+    due.forEach(d => { xoWatchDone[d.tf] = d.b; });                 // mark first: a failure must not loop
+    const tokens = tokenData.slice();
+    let pending = [];
+    tokens.forEach(t => due.forEach(d => pending.push({ t, tf:d.tf, b:d.b })));
+    const total = pending.length;
+    for(let attempt = 0; attempt <= XO_WATCH_RETRY_MS.length && pending.length; attempt++){
+      if(attempt > 0){
+        // "stale" everywhere is just the exchange being a few seconds behind — that is what the retries are for.
+        // "fail" everywhere is a network or exchange outage: don't hammer it, leave it to the next scan.
+        const failed = pending.filter(j => j.status === 'fail').length;
+        if(failed > 4 && failed > pending.length * 0.8) break;
+        await new Promise(r => setTimeout(r, XO_WATCH_RETRY_MS[attempt - 1]));
+      }
+      const again = [];
+      for(let i = 0; i < pending.length; i += XO_WATCH_BATCH){
+        await Promise.all(pending.slice(i, i + XO_WATCH_BATCH).map(async job => {
+          job.status = await xoWatchCheck(job);
+          if(job.status !== 'ok') again.push(job);
+        }));
+      }
+      pending = again;
+    }
+    const arrows = xoAfterScan(tokens);
+    Object.assign(xoWatchInfo, { lastRun: Date.now(), lastTfs: due.map(d => TF_LABELS[d.tf]), checked: total - pending.length, total, arrows });
+    if(arrows || pending.length){
+      log(`Trend watch · ${xoWatchInfo.lastTfs.join(' + ')} closed · ${total - pending.length}/${total} checked · ${arrows} new arrow${arrows === 1 ? '' : 's'}`, arrows ? 'ok' : 'warn');
+    }
+    tdpRefreshTrend();
+  } catch(e){ /* never let the watcher throw into the page */ }
+  finally { xoWatchBusy = false; xoRenderWatchStatus(); }
+}
+function tdpRefreshTrend(){
+  if(!tdpSymbol) return;
+  const el = document.getElementById('tdpTrendBody'), token = findTokenBySymbol(tdpSymbol);
+  if(el && token) el.innerHTML = tdpTrendSectionHtml(token);
+}
+// what the Settings tab and the log say about coverage
+function xoCoverageNote(){
+  const s = xoLoadSettings(), auto = !!document.getElementById('arEnabled')?.checked;
+  if(s.watch) return tokenData.length || auto ? '' : 'Run one scan so the candle-close watcher knows which tokens to follow.';
+  return auto ? '' : 'The candle-close watcher and auto-scan are both off, so arrows are only checked when you press Scan Now.';
+}
+function xoRenderWatchStatus(){
+  const el = document.getElementById('xoWatchStatus');
+  if(!el) return;
+  const s = xoLoadSettings();
+  const tfs = XO_TFS.filter(tf => s.tfs[tf]);
+  let msg;
+  if(!s.enabled) msg = 'Trend notifications are off';
+  else if(!s.watch) msg = 'Off. Arrows are only checked when a scan runs';
+  else if(!tfs.length) msg = 'Switch on a timeframe above';
+  else if(!tokenData.length) msg = 'Run one scan so it knows which tokens to watch';
+  else {
+    const now = Date.now();
+    const nextOf = tf => (Math.floor(now / XO_TF_MS[tf]) + 1) * XO_TF_MS[tf];
+    const next = Math.min(...tfs.map(nextOf));
+    const nextTfs = tfs.filter(tf => nextOf(tf) === next).map(tf => TF_LABELS[tf]).join(' + ');
+    const last = xoWatchInfo.lastRun ? `last check ${xoClock(xoWatchInfo.lastRun)} (${xoWatchInfo.lastTfs.join(' + ')})` : 'no check yet';
+    msg = `Watching ${tokenData.length} token${tokenData.length === 1 ? '' : 's'} · ${last} · next: ${nextTfs} close at ${xoClock(next)}`;
+  }
+  el.textContent = msg;
+}
+xoWatchStart();
+
 function xoSendTest(){
   xoDeliver([{ symbol:'BTC', tf:'SIX_HOUR', dir:'bull', time:Date.now(), price:(findTokenBySymbol('BTC')||{}).price || 100000, age:0, test:true }], { test:true });
 }
@@ -8672,6 +8811,7 @@ function xoRenderSettings(){
   const s = xoLoadSettings();
   document.getElementById('xoEnabled').checked = s.enabled;
   document.getElementById('xoDesktop').checked = s.desktop;
+  document.getElementById('xoWatch').checked = s.watch;
   XO_TFS.forEach(tf => { document.getElementById(XO_TF_UI[tf]).checked = !!s.tfs[tf]; });
   document.getElementById('xoSound').checked = s.sound;
   document.getElementById('xoSoundStyle').value = s.soundStyle;
@@ -8682,7 +8822,8 @@ function xoRenderSettings(){
   xoRenderMuted();
   xoRenderDesktopStatus();
   const warn = document.getElementById('xoAutoScanWarn');
-  if(warn) warn.style.display = document.getElementById('arEnabled')?.checked ? 'none' : 'block';
+  if(warn){ const note = xoCoverageNote(); warn.textContent = note; warn.style.display = note ? 'block' : 'none'; }
+  xoRenderWatchStatus();
 }
 
 async function alertSendTest(){
