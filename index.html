@@ -293,7 +293,7 @@ body {
   background: var(--bg3);
   border-bottom: 1px solid var(--border);
   position: sticky;
-  top: 53px;
+  top: var(--topbar-h, 53px);
   z-index: 99;
   padding: var(--sp-2) var(--sp-4);
 }
@@ -928,6 +928,7 @@ input.ctrl::placeholder { color: var(--text-3); }
   transition: all var(--t-fast) var(--ease-out);
 }
 .more-dropdown button:hover { background: var(--blue-dim); color: var(--blue); }
+.more-dropdown .more-row button { width: auto; }   /* the theme toggle sits beside its label; at 100% it pushed the page ~11px wider than a phone screen */
 .more-section-label {
   font-family: var(--font-ui);
   font-size: 0.56rem;
@@ -950,8 +951,73 @@ input.ctrl::placeholder { color: var(--text-3); }
 }
 .more-dropdown .tf-group { margin: 0 4px 4px; }
 .more-dropdown .auto-refresh { margin: 0 4px; width: calc(100% - 8px); box-sizing: border-box; }
-.more-dropdown .token-search-wrap { margin: 0 4px 4px; width: calc(100% - 8px); }
-.more-dropdown .token-search-input { width: 100%; box-sizing: border-box; margin-left: 0; }
+
+/* ── Topbar quick actions: search · alerts · journal ── */
+.tb-actions { display: flex; align-items: center; gap: var(--sp-2); }
+.tb-icon-btn {
+  position: relative; background: transparent; border: 1px solid var(--border); color: var(--text-2);
+  width: 30px; height: 30px; border-radius: var(--r-md); cursor: pointer; padding: 0; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--t-fast) var(--ease-out);
+}
+.tb-icon-btn:hover, .tb-icon-btn.active { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); }
+.tb-icon-btn:focus-visible, .more-toggle:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.tb-icon-btn svg { width: 15px; height: 15px; display: block; }
+.tb-badge {
+  position: absolute; top: -5px; right: -5px; min-width: 15px; height: 15px; padding: 0 4px; box-sizing: border-box;
+  border-radius: 999px; background: var(--blue); color: var(--bg3); border: 2px solid var(--bg);
+  font-family: var(--font-mono); font-size: 0.5rem; font-weight: 800; line-height: 11px; text-align: center;
+  box-shadow: 0 0 8px rgba(6,229,208,0.55);
+}
+.tb-badge[hidden] { display: none; }
+
+.tb-search { position: relative; display: flex; align-items: center; }
+.tb-search-toggle { display: none; }
+.tb-search-field { position: relative; display: flex; align-items: center; }
+.tb-search-ico { position: absolute; left: 9px; color: var(--text-3); pointer-events: none; display: flex; }
+.tb-search-ico svg { width: 13px; height: 13px; }
+.tb-search .token-search-input {
+  width: 190px; margin: 0; box-sizing: border-box; height: 30px; padding: 0 30px 0 28px;
+  background: var(--bg2); border: 1px solid var(--border); font-size: 0.72rem;
+  transition: width var(--t-normal) var(--ease-out), border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.tb-search .token-search-input::placeholder { color: var(--text-3); }
+.tb-search .token-search-input:hover { border-color: var(--text-3); }
+.tb-search .token-search-input:focus { width: 250px; border-color: var(--blue); }
+.tb-kbd {
+  position: absolute; right: 7px; font-family: var(--font-mono); font-size: 0.6rem; line-height: 1; color: var(--text-3);
+  border: 1px solid var(--border); border-radius: 4px; padding: 2px 5px; pointer-events: none; background: var(--bg3);
+}
+.tb-search .token-search-input:focus ~ .tb-kbd { display: none; }
+.tb-search .token-search-dropdown { left: auto; right: 0; width: max(100%, 280px); }
+
+/* The bar has to fit search + alerts + journal + status + menu. Under 1000px the live label collapses to
+   its dot; under 800px the bar becomes two rows (logo + actions, then the BTC/ETH prices) so nothing
+   is pushed off-screen. */
+.topbar-left { display: flex; align-items: center; gap: var(--sp-5); min-width: 0; }
+.topbar-right { flex-wrap: nowrap; flex-shrink: 0; }
+@media (max-width: 1000px) { #liveLabel { display: none; } }
+@media (max-width: 800px) {
+  .topbar { flex-wrap: wrap; align-items: center; }
+  .topbar-left { display: contents; }                /* logo, prices and actions become flex items of .topbar */
+  .topbar-left > div:first-child { order: 1; }
+  .topbar-right { order: 2; flex-wrap: nowrap; flex-shrink: 0; margin-left: auto; gap: 6px; }
+  .topbar-prices { order: 3; flex: 1 1 100%; justify-content: space-around; padding: 5px 10px; }
+}
+
+/* narrower screens: search collapses to an icon that opens a full-width field under the bar */
+@media (max-width: 980px) {
+  .tb-search-toggle { display: flex; }
+  .tb-search-field { display: none; }
+  .tb-search.open .tb-search-field {
+    display: flex; position: fixed; z-index: 150; left: var(--sp-3); right: var(--sp-3); top: calc(var(--topbar-h, 53px) + 6px);
+  }
+  .tb-search.open .token-search-input, .tb-search.open .token-search-input:focus {
+    width: 100%; height: 38px; font-size: 0.8rem; box-shadow: var(--shadow-md); border-color: var(--blue);
+  }
+  .tb-search .token-search-dropdown { left: 0; right: 0; width: auto; }
+  .tb-kbd { display: none; }
+}
 
 /* ═══════════════════════════════════════
    BTC/ETH TREND BAR
@@ -1938,14 +2004,15 @@ input.ctrl::placeholder { color: var(--text-3); }
 ═══════════════════════════════════════ */
 @media (max-width: 620px) {
   /* ── Topbar ── */
-  .topbar { padding: 10px 14px; gap: 8px; flex-wrap: nowrap; align-items: center; }
+  .topbar { padding: 10px 14px; gap: 8px; }
   .logo { font-size: 0.88rem; letter-spacing: 2px; }
   .logo-sub { display: none; }
-  .topbar-right { gap: 6px; flex-shrink: 0; flex-wrap: nowrap; align-items: center; }
+  .tb-actions { gap: 6px; }
+  .tb-icon-btn { width: 28px; height: 28px; }
   #liveLabel, .last-scan { display: none; }
   .auto-refresh { padding: 4px 8px; font-size: 0.6rem; gap: 4px; }
   .journal-btn { padding: 5px 10px; font-size: 0.65rem; }
-  .theme-toggle, .more-toggle { width: 26px; height: 26px; font-size: 0.78rem; }
+  .theme-toggle, .more-toggle { width: 28px; height: 28px; font-size: 0.78rem; }
   .more-dropdown { right: -6px; }
 
   /* ── Main layout ── */
@@ -2450,7 +2517,7 @@ input.ctrl::placeholder { color: var(--text-3); }
 
 <!-- TOP BAR -->
 <div class="topbar">
-  <div style="display:flex;align-items:center;gap:var(--sp-5)">
+  <div class="topbar-left">
     <div>
       <div class="logo">3<span>DRIVE</span> SCANNER</div>
       <div class="logo-sub">fvg · 3-drive · bb squeeze · range deviation</div>
@@ -2475,17 +2542,29 @@ input.ctrl::placeholder { color: var(--text-3); }
       <div id="liveDot" class="live-dot"></div>
       <span id="liveLabel" class="live-label" aria-live="polite">checking…</span>
     </div>
+    <div class="tb-actions">
+      <div class="tb-search" id="tokenSearchWrap">
+        <button class="tb-icon-btn tb-search-toggle" id="tbSearchBtn" type="button" onclick="toggleTopSearch()" title="Search token ( / )" aria-label="Search token" aria-expanded="false" aria-controls="tokenSearchInput">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        </button>
+        <div class="tb-search-field">
+          <span class="tb-search-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+          <input type="text" id="tokenSearchInput" class="token-search-input" placeholder="Search token…" aria-label="Search token" oninput="onTokenSearchInput()" onfocus="onTokenSearchInput()" onkeydown="onTokenSearchKeydown(event)" autocomplete="off" spellcheck="false">
+          <kbd class="tb-kbd" aria-hidden="true">/</kbd>
+          <div class="token-search-dropdown" id="tokenSearchDropdown" style="display:none"></div>
+        </div>
+      </div>
+      <button class="tb-icon-btn" id="tbAlertsBtn" type="button" onclick="openAlerts()" title="Alerts" aria-label="Alerts" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        <span class="tb-badge" id="tbAlertsBadge" hidden aria-hidden="true">0</span>
+      </button>
+      <button class="tb-icon-btn" id="tbJournalBtn" type="button" onclick="openJournal()" title="Trading journal" aria-label="Trading journal" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"/><path d="M8.5 7h7M8.5 11h7"/></svg>
+      </button>
+    </div>
     <div class="more-menu">
       <button class="more-toggle" id="moreToggle" onclick="toggleMoreMenu()" title="Settings & more" aria-label="Settings and more options" aria-haspopup="true" aria-expanded="false">⋯</button>
       <div class="more-dropdown" id="moreDropdown" role="menu" aria-label="Settings and more options">
-
-        <div class="more-section-label">Search</div>
-        <div class="token-search-wrap" id="tokenSearchWrap">
-          <input type="text" id="tokenSearchInput" class="token-search-input" placeholder="Search token…" oninput="onTokenSearchInput()" onkeydown="onTokenSearchKeydown(event)" autocomplete="off">
-          <div class="token-search-dropdown" id="tokenSearchDropdown" style="display:none"></div>
-        </div>
-
-        <div class="more-divider"></div>
 
         <div class="more-section-label">Appearance</div>
         <div class="more-row">
@@ -2525,9 +2604,7 @@ input.ctrl::placeholder { color: var(--text-3); }
 
         <div class="more-divider"></div>
 
-        <button role="menuitem" onclick="closeMoreMenu();openAlerts()"><span aria-hidden="true">🔔</span> Alerts</button>
         <button role="menuitem" onclick="closeMoreMenu();openHitRate()" id="hitRateBtn"><span aria-hidden="true">📊</span> Hit Rate</button>
-        <button role="menuitem" onclick="closeMoreMenu();openJournal()"><span aria-hidden="true">📓</span> Journal</button>
       </div>
     </div>
   </div>
@@ -6321,6 +6398,11 @@ function onTokenSearchInput(){
   const q = document.getElementById('tokenSearchInput').value.trim().toUpperCase();
   const dd = document.getElementById('tokenSearchDropdown');
   if(!q){ dd.style.display = 'none'; dd.innerHTML = ''; return; }
+  if(!tokenData.length){
+    dd.innerHTML = '<div class="token-search-empty">Run a scan first, then search the tokens it found</div>';
+    dd.style.display = 'block';
+    return;
+  }
   const matches = tokenData
     .filter(t => t.symbol.toUpperCase().includes(q) || (t.name||'').toUpperCase().includes(q))
     .slice(0, 8);
@@ -6339,19 +6421,73 @@ function onTokenSearchInput(){
 function onTokenSearchKeydown(e){
   if(e.key === 'Enter'){
     const q = document.getElementById('tokenSearchInput').value.trim().toUpperCase();
-    const match = tokenData.find(t => t.symbol.toUpperCase() === q) || tokenData.find(t => t.symbol.toUpperCase().includes(q));
+    if(!q) return;
+    // same matching as the results list: exact ticker, then ticker contains, then name contains
+    const match = tokenData.find(t => t.symbol.toUpperCase() === q)
+      || tokenData.find(t => t.symbol.toUpperCase().includes(q))
+      || tokenData.find(t => (t.name||'').toUpperCase().includes(q));
     if(match) selectTokenSearch(match.symbol);
   } else if(e.key === 'Escape'){
-    closeMoreMenu();
+    closeTopSearch(true);
   }
 }
 
 function selectTokenSearch(symbol){
-  document.getElementById('tokenSearchDropdown').style.display = 'none';
-  document.getElementById('tokenSearchInput').value = '';
-  closeMoreMenu();
+  closeTopSearch(false);
   openTokenDetail(symbol);
 }
+
+// ── Topbar search: always-visible field on wide screens; an icon that opens a full-width field on narrow ones ──
+function isSearchCollapsed(){ return window.matchMedia('(max-width: 980px)').matches; }
+function openTopSearch(){
+  const wrap = document.getElementById('tokenSearchWrap');
+  wrap.classList.add('open');
+  document.getElementById('tbSearchBtn').setAttribute('aria-expanded', 'true');
+  document.getElementById('tbSearchBtn').classList.add('active');
+  closeMoreMenu();
+  const input = document.getElementById('tokenSearchInput');
+  setTimeout(() => input.focus(), 0);   // after the field is displayed
+}
+function closeTopSearch(refocusButton){
+  const wrap = document.getElementById('tokenSearchWrap');
+  const input = document.getElementById('tokenSearchInput');
+  const dd = document.getElementById('tokenSearchDropdown');
+  if(!wrap) return;
+  input.value = ''; dd.style.display = 'none'; dd.innerHTML = '';
+  input.blur();
+  wrap.classList.remove('open');
+  const btn = document.getElementById('tbSearchBtn');
+  btn.setAttribute('aria-expanded', 'false'); btn.classList.remove('active');
+  if(refocusButton && isSearchCollapsed()) btn.focus();
+}
+function toggleTopSearch(){
+  if(document.getElementById('tokenSearchWrap').classList.contains('open')) closeTopSearch(false);
+  else openTopSearch();
+}
+// click anywhere outside the search closes its results (and, on narrow screens, the field itself)
+document.addEventListener('click', function(e){
+  const wrap = document.getElementById('tokenSearchWrap');
+  if(!wrap || wrap.contains(e.target)) return;
+  document.getElementById('tokenSearchDropdown').style.display = 'none';
+  if(wrap.classList.contains('open')) closeTopSearch(false);
+});
+// "/" jumps to search from anywhere that isn't a text field
+document.addEventListener('keydown', function(e){
+  if(e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+  const el = document.activeElement;
+  if(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return;
+  if(a11yActiveOverlay) return;          // a modal is open — leave the keyboard alone
+  e.preventDefault();
+  if(isSearchCollapsed()) openTopSearch(); else document.getElementById('tokenSearchInput').focus();
+});
+// the sticky strip under the bar needs the bar's real height (it wraps to two rows on phones)
+(function(){
+  const bar = document.querySelector('.topbar');
+  if(!bar) return;
+  const set = () => document.documentElement.style.setProperty('--topbar-h', bar.offsetHeight + 'px');
+  set();
+  if('ResizeObserver' in window) new ResizeObserver(set).observe(bar); else window.addEventListener('resize', set);
+})();
 
 function openTokenDetail(symbol){
   tdpSymbol = symbol;
@@ -7681,25 +7817,12 @@ function toggleMoreMenu(){
   const btn = document.getElementById('moreToggle');
   btn.classList.toggle('active', open);
   btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-  if(open){
-    const input = document.getElementById('tokenSearchInput');
-    if(input) setTimeout(() => input.focus(), 50); // after the open transition starts, not before
-  } else {
-    resetMoreMenuSearch();
-  }
 }
 function closeMoreMenu(){
   document.getElementById('moreDropdown').classList.remove('open');
   const btn = document.getElementById('moreToggle');
   btn.classList.remove('active');
   btn.setAttribute('aria-expanded', 'false');
-  resetMoreMenuSearch();
-}
-function resetMoreMenuSearch(){
-  const input = document.getElementById('tokenSearchInput');
-  const dd = document.getElementById('tokenSearchDropdown');
-  if(input) input.value = '';
-  if(dd){ dd.style.display = 'none'; dd.innerHTML = ''; }
 }
 document.addEventListener('click', function(e){
   const menu = document.getElementById('moreMenu') || document.querySelector('.more-menu');
@@ -7972,6 +8095,7 @@ function openAlerts(){
   document.getElementById('alertOnConfluence').checked = !!s.onConfluence;
   if(s.lastSent) document.getElementById('alertLastSent').textContent = 'Last sent: '+new Date(s.lastSent).toLocaleString();
   xoRenderSettings();
+  xoMarkAlertsSeen();
   document.getElementById('alertsOverlay').classList.add('open');
   openModalA11y('alertsOverlay');
 }
@@ -8062,6 +8186,27 @@ function xoLoadHistory(){
 function xoPushHistory(items){
   const h = items.map(i => ({ symbol:i.symbol, tf:i.tf, dir:i.dir, time:i.time, price:i.price, at:Date.now() })).concat(xoLoadHistory()).slice(0, 60);
   try { localStorage.setItem(XO_HISTORY_KEY, JSON.stringify(h)); } catch(e){}
+  xoUpdateBell();
+}
+
+// Bell in the top bar: a count of trend arrows that printed since the Alerts panel was last opened.
+const XO_ALERTS_SEEN_KEY = '3drive_xo_alerts_seen_at';
+function xoUpdateBell(){
+  const badge = document.getElementById('tbAlertsBadge');
+  const btn = document.getElementById('tbAlertsBtn');
+  if(!badge || !btn) return;
+  let seenAt = 0;
+  try { seenAt = +localStorage.getItem(XO_ALERTS_SEEN_KEY) || 0; } catch(e){}
+  const n = xoLoadHistory().filter(h => h.at > seenAt).length;
+  badge.hidden = n === 0;
+  badge.textContent = n > 9 ? '9+' : String(n);
+  const label = n ? `Alerts, ${n} new trend arrow${n > 1 ? 's' : ''}` : 'Alerts';
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
+}
+function xoMarkAlertsSeen(){
+  try { localStorage.setItem(XO_ALERTS_SEEN_KEY, String(Date.now())); } catch(e){}
+  xoUpdateBell();
 }
 
 function xoFmtAgo(ms){
@@ -8307,6 +8452,7 @@ function xoRenderDesktopStatus(){
     : p === 'denied' ? 'Blocked. Allow notifications for this site in your browser settings, then reopen this panel'
     : 'Needs your permission first';
 }
+xoUpdateBell();
 function xoSendTest(){
   xoDeliver([{ symbol:'BTC', tf:'SIX_HOUR', dir:'bull', time:Date.now(), price:(findTokenBySymbol('BTC')||{}).price || 100000, age:0, test:true }], { test:true });
 }

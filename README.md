@@ -26,6 +26,10 @@ Real resting bid/ask depth per token — not leveraged positions, not predicted 
 ### Token Search
 Search any scanned token to open a floating popup combining Pattern, RSI, Range, and Order Book data for that one token in one place. Minimize to a summary pill, maximize to a larger panel, or close — price ticks live while open.
 
+## Top bar
+
+Search, Alerts and Journal live in the top bar, so they're one click away. Press **/** anywhere (outside a text field or dialog) to jump to token search. The bell shows how many trend arrows have printed since you last opened Alerts. On narrow screens search collapses to an icon and the BTC/ETH prices drop to a second row; the **⋯** menu keeps the less-used settings (theme, market, range engine, auto-scan, hit rate).
+
 ## Trend-shift notifications
 
 When a Trader XO arrow prints on **4H or 1H** (30M is opt-in), the app shows an in-app popup and, if you've enabled them, a desktop notification. No email involved. Configure under **⋯ → Alerts → Trend shifts**, including a list of tokens to mute (or hit "mute" on any popup).
