@@ -26,6 +26,17 @@ Real resting bid/ask depth per token — not leveraged positions, not predicted 
 ### Token Search
 Search any scanned token to open a floating popup combining Pattern, RSI, Range, and Order Book data for that one token in one place. Minimize to a summary pill, maximize to a larger panel, or close — price ticks live while open.
 
+## Confluence tab
+
+A token gets a Confluence signal (long or short) when **at least two of three core pillars agree**: **RSI** at an extreme (1H/4H), **Order Book** imbalance of 50%+, and the **Trend** pillar, which is Trader XO (EMA 12/50) pointing the same way on **both 4H and 1H**. A fresh 1H arrow (within 3 closed candles) or 4H arrow scores extra, and a whipsawing 1H trend (XO's chop flag) is discounted. On top of that, **S/R** (price at a same-side level), **volume** (the last closed 1H candle at 1.5x+ the 20-candle average and leaning with the trade) and **funding** (Binance perp funding; supportive is a small bonus, crowded a small penalty) adjust the score. **The Range (FRVP) engine no longer weighs anything here**; it still runs and shows in the token popup.
+
+- The 4H trend used by this tab is Trader XO's 4H state (falling back to the older EMA-slope read for tokens without XO data), so a card can't call itself "aligned with the 4H uptrend" while the Trend pillar disagrees.
+- **"with 4H trend only"** (on by default) hides signals that fight the 4H trend; the tab says how many are hidden. It applies to the emailed confluence alerts too.
+- Scores are capped at 100 for display and alerts. Because three agreeing pillars overshoot the cap almost every time, ties at 100 are ordered by the uncapped score, so the ranking doesn't go flat.
+- Each card shows a **starting plan**: entry at the current price; the stop beyond the last 12 closed 1H candles' swing (or a nearer same-side S/R level that is at least 0.5% away), never closer than 0.6%; the target at the next opposing S/R level if it pays 1.5-5R, otherwise 2R. These are mechanical defaults to edit, not advice.
+- **＋ Log trade** opens today's journal with the form filled in as an *open* trade: token, direction, 1H, entry, stop, target, your last-used leverage, and a note summarising why. Nothing is saved until you press Save Trade. Saved trades carry `setup: confluence` and the score, and the CSV export has Setup and Score columns, so the journal can later be sliced by setup.
+- The journal form now remembers the leverage you last used instead of snapping back to 10.
+
 ## Top bar
 
 Search, Alerts and Journal live in the top bar, so they're one click away. Press **/** anywhere (outside a text field or dialog) to jump to token search. The bell shows how many trend arrows have printed since you last opened Alerts. On narrow screens search collapses to an icon and the BTC/ETH prices drop to a second row; the **⋯** menu keeps the less-used settings (theme, market, range engine, auto-scan, hit rate).

@@ -2468,6 +2468,13 @@ input.ctrl::placeholder { color: var(--text-3); }
 }
 @media (prefers-reduced-motion: reduce) { .al-track, .al-track::after, .al-chip span, .al-group { transition: none; } }
 
+.conf-plan { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin-top: var(--sp-3); padding-top: var(--sp-2); border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-2); }
+.conf-plan em { font-style: normal; color: var(--text-3); }
+.conf-plan-rr { margin-left: auto; color: var(--blue); font-weight: 700; }
+.conf-log-btn { margin-top: var(--sp-3); width: 100%; background: var(--blue-dim); border: 1px solid var(--blue); color: var(--blue); padding: 7px var(--sp-3); font-family: var(--font-ui); font-size: 0.72rem; font-weight: 700; border-radius: var(--r-md); cursor: pointer; transition: all var(--t-fast) var(--ease-out); }
+.conf-log-btn:hover { box-shadow: var(--shadow-glow); }
+.conf-log-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
 /* ── Trader XO trend arrows: token popup rows + in-app toasts ── */
 .tdp-xo-sub { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-3); padding: 0 0 5px; line-height: 1.5; }
 .tdp-xo-sub .warn { color: var(--amber); }
@@ -2947,7 +2954,9 @@ input.ctrl::placeholder { color: var(--text-3); }
 
   <div class="controls-row">
     <span class="ctrl-label">confluence:</span>
-    <span class="ob-band-note">2 of 3 (RSI · Range · Order Book) required, S/R is a bonus</span>
+    <span class="ob-band-note">2 of 3 (RSI · Order Book · Trend) required; S/R, volume and funding adjust the score</span>
+    <button class="filter-btn" id="confTrendOnlyBtn" type="button" aria-pressed="true" onclick="setConfTrendOnly(this.getAttribute('aria-pressed') !== 'true')" title="Hide signals that fight the 4H Trader XO trend">with 4H trend only</button>
+    <span class="gl-updated" id="confHiddenNote" aria-live="polite"></span>
     <button class="btn primary" id="confScanBtn" onclick="startScan()">▶ SCAN NOW</button>
     <span class="gl-updated" id="confUpdated" aria-live="polite"></span>
   </div>
@@ -2967,9 +2976,9 @@ input.ctrl::placeholder { color: var(--text-3); }
 
   <div class="conf-section">
     <div class="conf-section-title"><span class="conf-section-icon">⬢</span> Confluence Signals</div>
-    <div class="conf-section-sub">Built from RSI + Range (FRVP) + Order Book — fires independently of whether a chart pattern exists. At least 2 of the 3 core pillars must be concrete in the same direction; Support/Resistance adds bonus conviction but is never one of the two.</div>
+    <div class="conf-section-sub">Built from RSI + Order Book + Trend (Trader XO on 4H and 1H) — fires independently of whether a chart pattern exists. At least 2 of the 3 core pillars must be concrete in the same direction; Support/Resistance, volume and funding adjust the score but are never one of the two. Range no longer counts. Each card carries a starting plan (entry, stop, target) and a button that opens it in the journal.</div>
     <div class="conf-grid" id="confSignalGrid">
-      <div class="gl-empty">Press <strong>SCAN NOW</strong> — confluence signals need RSI, Range, and Order Book data from the same scan cycle.</div>
+      <div class="gl-empty">Press <strong>SCAN NOW</strong> — confluence signals need RSI, Order Book and Trader XO data from the same scan cycle.</div>
     </div>
   </div>
 
@@ -3196,8 +3205,11 @@ const CONF_RSI_EXTREME  = 30;   // matches the 30/70 hot/cold zone used everywhe
 const CONF_RSI_TREND_RELAXED = 45; // relaxed bar for WITH-trend pullback checks — pullbacks in a real trend rarely reach a textbook extreme
 const CONF_OB_IMBALANCE = 0.50; // 50%+ imbalance = real, not marginal, pressure
 const CONF_SR_TOLERANCE = 0.015;// within 1.5% of a support/resistance zone counts as "at" it
-const CONF_RANGE_TREND_BONUS   = 10; // Range pillar score bonus when aligned with the 4H trend
-const CONF_RANGE_TREND_PENALTY = 10; // Range pillar score penalty when it fights the 4H trend
+const CONF_TREND_FRESH_1H = 3;   // a 1H Trader XO arrow within this many closed candles counts as "fresh" (timing bonus)
+const CONF_TREND_FRESH_4H = 1;   // ...and a 4H arrow within this many
+const CONF_VOL_SURGE = 1.5;      // last closed 1H candle's volume vs the average of the 20 before it
+const CONF_FUNDING_CROWDED = 0.05; // % per 8h: at or beyond this the trade is on the crowded side of the market
+const CONF_MIN_STOP_PCT = 0.6;   // the suggested stop is never closer than this to entry — tighter than that is just noise
 
 const STABLES = new Set([
   'USDT','USDC','BUSD','DAI','TUSD','USDP','FDUSD','USDD','FRAX','LUSD','SUSD',
@@ -4241,10 +4253,10 @@ function getConfluenceBadgeHTML(token) {
 function exportJournal(){
   const data = JSON.parse(localStorage.getItem('3drive_journal_v1')||'{}');
   const margin = (() => { try { const w = JSON.parse(localStorage.getItem('3drive_weekly_balance_v1')||'{}'); return w.riskAmount != null ? w.riskAmount : 300; } catch(e){ return 300; } })();
-  const rows = [['Date','Symbol','Direction','Timeframe','Leverage','Entry','SL','Exit','Result','R','PnL_USD','Notes']];
+  const rows = [['Date','Symbol','Direction','Timeframe','Leverage','Entry','SL','Exit','Result','R','PnL_USD','Setup','Score','Notes']];
   Object.entries(data).sort().forEach(([date, trades]) => {
     trades.forEach(t => {
-      rows.push([date, t.symbol, t.dir, t.tf, t.leverage||'', t.entry, t.sl, t.exit||'', t.result, t.r??'', (t.result!=='open' && t.r!=null) ? Math.round(jTradePnL(t, margin)*100)/100 : '', t.notes||'']);
+      rows.push([date, t.symbol, t.dir, t.tf, t.leverage||'', t.entry, t.sl, t.exit||'', t.result, t.r??'', (t.result!=='open' && t.r!=null) ? Math.round(jTradePnL(t, margin)*100)/100 : '', t.setup||'', t.score??'', t.notes||'']);
     });
   });
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -6167,12 +6179,13 @@ function renderOrderbook(){
 }
 
 // ══════════════════════════════════════════════════════════
-// CONFLUENCE — a standalone signal built from RSI + Range (FRVP) + Order
-// Book, independent of whether any chart pattern (3-Drive/FVG/Squeeze) is
-// present at all. At least 2 of the 3 core pillars must be independently
+// CONFLUENCE — a standalone signal built from RSI + Order Book + Trend
+// (Trader XO), independent of whether any chart pattern (3-Drive/FVG/Squeeze)
+// is present at all. At least 2 of the 3 core pillars must be independently
 // "concrete" (not just leaning, genuinely extreme) in the same direction;
-// Support/Resistance adds bonus conviction but never counts as one of the
-// two. Recomputed at render time from whatever source data currently
+// Support/Resistance, volume and funding adjust the score but never count as
+// one of the two. The Range (FRVP) engine no longer weighs anything here — it
+// still runs and shows in the token popup. Recomputed at render time from whatever source data currently
 // exists, so it fills in progressively as RSI Ranking / Order Book finish,
 // rather than needing all three scans done before showing anything.
 // ══════════════════════════════════════════════════════════
@@ -6183,6 +6196,10 @@ function renderOrderbook(){
 // reverse," it's what a healthy trend looks like). Rather than a separate mechanism,
 // this reuses the exact same trend read the rest of the app already trusts.
 function getTokenTrend(token){
+  // Trader XO's 4H state is the trend read for confluence — the same one the Trend pillar and the
+  // chart use, so a card can't say "aligned with the 4H uptrend" while the pillar says otherwise.
+  const xo4 = token.xo && token.xo.SIX_HOUR;
+  if(xo4) return xo4.state === 'bull' ? 'up' : 'down';
   const closes = token.ohlc && token.ohlc.SIX_HOUR && token.ohlc.SIX_HOUR.closes;
   if(!closes) return 'neutral';
   try { return get4HTrend(closes); } catch(e){ return 'neutral'; }
@@ -6219,25 +6236,120 @@ function confluenceRSI(token, dir, trend){
   return { concrete: true, both, r1h, r4h, points, bar, withTrend };
 }
 
-function confluenceRange(token, dir, trend){
-  const r = token.rangeData;
-  if(!r) return null;
-  const wantStates = dir === 'bullish' ? ['dev-below', 'confirmed-up'] : ['dev-above', 'confirmed-down'];
-  if(!wantStates.includes(r.state)) return null;
-  const confirmed = r.state === 'confirmed-up' || r.state === 'confirmed-down';
-  let points = Math.round((confirmed ? 40 : 30) + (r.qualityScore / 100) * 15);
+// Trend pillar — Trader XO on 4H AND 1H both pointing the way of the trade. Timing comes from the arrow:
+// a fresh 1H (or 4H) arrow scores extra, and a whipsawing 1H trend (XO's own chop flag) is discounted.
+function confluenceTrend(token, dir){
+  const x4 = token.xo && token.xo.SIX_HOUR, x1 = token.xo && token.xo.ONE_HOUR;
+  if(!x4 || !x1) return null;
+  const want = dir === 'bullish' ? 'bull' : 'bear';
+  if(x4.state !== want || x1.state !== want) return null;
+  const a1 = x1.lastArrow && x1.lastArrow.dir === want ? x1.lastArrow : null;
+  const a4 = x4.lastArrow && x4.lastArrow.dir === want ? x4.lastArrow : null;
+  const fresh1 = !!(a1 && a1.barsAgo <= CONF_TREND_FRESH_1H);
+  const fresh4 = !!(a4 && a4.barsAgo <= CONF_TREND_FRESH_4H);
+  let points = 30 + (fresh1 ? 10 : 0) + (fresh4 ? 5 : 0);
+  if(x1.choppy) points -= 10;
+  return { concrete: true, points, fresh1, fresh4, choppy: !!x1.choppy,
+    arrow1Time: a1 && a1.time != null ? a1.time + XO_TF_MS.ONE_HOUR : null, aboveMacro1h: x1.aboveMacro };
+}
 
-  // A dip-buy inside a confirmed uptrend (or rip-sell inside a confirmed downtrend) is a
-  // meaningfully stronger setup than the same deviation with no trend context. A
-  // deviation call fighting the trend (e.g. calling a top mid-uptrend) gets discounted,
-  // not treated with equal confidence — the qualifying states themselves don't change,
-  // only how much this pillar contributes to the final score.
-  const withTrend = (dir === 'bullish' && trend === 'up') || (dir === 'bearish' && trend === 'down');
-  const againstTrend = (dir === 'bullish' && trend === 'down') || (dir === 'bearish' && trend === 'up');
-  if(withTrend) points += CONF_RANGE_TREND_BONUS;
-  if(againstTrend) points = Math.max(10, points - CONF_RANGE_TREND_PENALTY);
+// Volume — the last CLOSED 1H candle traded well above its recent average, and leaned the trade's way.
+// (A volume spike against the trade is a warning, not confirmation, so it earns nothing.)
+function confluenceVolume(token, dir){
+  const o = token.ohlc && token.ohlc.ONE_HOUR;
+  if(!o || !o.volumes || !o.closes) return null;
+  let n = o.closes.length;
+  if(o.times && o.times[n - 1] + XO_TF_MS.ONE_HOUR > Date.now()) n -= 1;      // drop the forming candle
+  if(n < 23) return null;
+  const base = o.volumes.slice(n - 21, n - 1).reduce((a, b) => a + b, 0) / 20;
+  if(!(base > 0)) return null;
+  const ratio = o.volumes[n - 1] / base;
+  if(ratio < CONF_VOL_SURGE) return null;
+  const withDir = dir === 'bullish' ? o.closes[n - 1] > o.closes[n - 2] : o.closes[n - 1] < o.closes[n - 2];
+  if(!withDir) return null;
+  return { ratio, points: Math.min(10, Math.round(4 + (ratio - CONF_VOL_SURGE) * 4)) };
+}
 
-  return { concrete: true, state: r.state, confirmed, grade: r.grade, points, withTrend, againstTrend };
+// Funding — perpetual funding rate, % per 8h. Positive = longs pay shorts. Being on the crowded side costs
+// you carry and adds squeeze risk; the other side is paid to wait.
+let fundingMap = {}, fundingFetchedAt = 0, fundingLoading = false;
+async function refreshFunding(force){
+  if(fundingLoading || (!force && Date.now() - fundingFetchedAt < 5 * 60 * 1000)) return false;
+  fundingLoading = true;
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 8000);
+    const res = await fetch('https://fapi.binance.com/fapi/v1/premiumIndex', { signal: ctl.signal, cache: 'no-store' });
+    clearTimeout(timer);
+    if(!res.ok) throw new Error('http ' + res.status);
+    const rows = await res.json();
+    const m = {};
+    (Array.isArray(rows) ? rows : []).forEach(r => {
+      if(r && typeof r.symbol === 'string' && r.symbol.endsWith('USDT') && r.lastFundingRate != null){
+        const v = parseFloat(r.lastFundingRate) * 100;
+        if(isFinite(v)) m[r.symbol.slice(0, -4)] = v;
+      }
+    });
+    if(Object.keys(m).length){ fundingMap = m; fundingFetchedAt = Date.now(); return true; }
+  } catch(e){ /* funding is a bonus signal — without it the score just has no funding term */ }
+  finally { fundingLoading = false; }
+  return false;
+}
+function confluenceFunding(token, dir){
+  const pct = fundingMap[token.symbol];
+  if(pct == null) return null;
+  const crowded = dir === 'bullish' ? pct >= CONF_FUNDING_CROWDED : pct <= -CONF_FUNDING_CROWDED;
+  const supportive = dir === 'bullish' ? pct <= 0 : pct >= 0;
+  const state = crowded ? 'crowded' : supportive ? 'supportive' : 'neutral';
+  return { rate: pct, state, points: crowded ? -5 : supportive ? 5 : 0 };
+}
+
+// A starting plan for the trade — entry at the current price, the stop just beyond the last 12 closed 1H
+// candles' swing (or the nearest same-side S/R level if that is tighter and not silly-close), the target at
+// the next opposing S/R level when it pays 1.5–5R, otherwise 2R. Mechanical defaults to edit, not advice.
+function confluencePlan(token, dir){
+  const o = token.ohlc && token.ohlc.ONE_HOUR;
+  const entry = token.price;
+  if(!o || !o.closes || !o.highs || !o.lows || !(entry > 0)) return null;
+  const long = dir === 'bullish';
+  let n = o.closes.length;
+  if(o.times && o.times[n - 1] + XO_TF_MS.ONE_HOUR > Date.now()) n -= 1;
+  if(n < 14) return null;
+  const buf = 0.0015;
+  const swing = long ? Math.min(...o.lows.slice(n - 12, n)) : Math.max(...o.highs.slice(n - 12, n));
+  let sl = long ? swing * (1 - buf) : swing * (1 + buf);
+  let stopBasis = long ? 'below the 12-candle 1H swing low' : 'above the 12-candle 1H swing high';
+  let levels = [];
+  try { levels = findSRLevels(o.closes, o.highs, o.lows, 100) || []; } catch(e){}
+  const sameSide = levels
+    .filter(l => l.type === (long ? 'support' : 'resistance') && (long ? l.price < entry && l.price > sl : l.price > entry && l.price < sl))
+    .filter(l => Math.abs(entry - l.price) / entry >= 0.005)
+    .sort((x, y) => Math.abs(entry - x.price) - Math.abs(entry - y.price));
+  if(sameSide.length){
+    sl = long ? sameSide[0].price * (1 - buf) : sameSide[0].price * (1 + buf);
+    stopBasis = (long ? 'below support ' : 'above resistance ') + fmtPrice(sameSide[0].price);
+  }
+  let risk = Math.abs(entry - sl);
+  if(!(risk > 0)) return null;
+  if(risk / entry * 100 < CONF_MIN_STOP_PCT){       // the swing/level is hugging price: a stop that close gets tagged by noise
+    const wasPct = (risk / entry * 100).toFixed(2);
+    risk = entry * CONF_MIN_STOP_PCT / 100;
+    sl = long ? entry - risk : entry + risk;
+    stopBasis = `${CONF_MIN_STOP_PCT}% minimum (the nearest structure is only ${wasPct}% away)`;
+  }
+  let tp = long ? entry + 2 * risk : entry - 2 * risk, targetBasis = '2R';
+  const opp = levels
+    .filter(l => l.type === (long ? 'resistance' : 'support') && (long ? l.price > entry : l.price < entry))
+    .sort((x, y) => Math.abs(entry - x.price) - Math.abs(entry - y.price));
+  for(const l of opp){
+    const rr = Math.abs(l.price - entry) / risk;
+    if(rr < 1.5) continue;                       // too close to be worth the risk — look at the next one
+    if(rr <= 5){ tp = long ? l.price * 0.998 : l.price * 1.002; targetBasis = (long ? 'next resistance ' : 'next support ') + fmtPrice(l.price); }
+    break;
+  }
+  const rr = Math.abs(tp - entry) / risk;
+  const sig = v => +v.toPrecision(6);
+  return { entry: sig(entry), sl: sig(sl), tp: sig(tp), rr: Math.round(rr * 10) / 10, riskPct: risk / entry * 100, stopBasis, targetBasis };
 }
 
 function confluenceOrderbook(token, dir){
@@ -6269,38 +6381,48 @@ function confluenceSR(token, dir){
 function computeConfluenceSignal(token, dir){
   const trend = getTokenTrend(token);
   // Order Book isn't a mean-reversion tool — real-time resting supply/demand doesn't need
-  // trend adaptation the way RSI/Range do, so it's untouched here.
+  // trend adaptation the way RSI does, so it's untouched here.
   const rsi = confluenceRSI(token, dir, trend);
-  const range = confluenceRange(token, dir, trend);
   const ob = confluenceOrderbook(token, dir);
-  const pillarCount = [rsi, range, ob].filter(Boolean).length;
+  const tr = confluenceTrend(token, dir);
+  const pillarCount = [rsi, ob, tr].filter(Boolean).length;
   if(pillarCount < 2) return null; // the hard rule — 2 of 3 core pillars, no exceptions
 
   const sr = confluenceSR(token, dir);
-  const rawScore = (rsi?.points||0) + (range?.points||0) + (ob?.points||0) + (sr?.points||0);
-  const score = Math.min(100, rawScore);
+  const vol = confluenceVolume(token, dir);
+  const fund = confluenceFunding(token, dir);
+  const rawScore = (rsi?.points||0) + (ob?.points||0) + (tr?.points||0) + (sr?.points||0) + (vol?.points||0) + (fund?.points||0);
+  const score = Math.max(0, Math.min(100, rawScore));   // what's shown, graded and alerted on
   const grade = score >= 75 ? 'A' : 'B';
 
-  // Same treatment as 3-Drive: included, never hard-excluded, but clearly flagged when
-  // the overall call fights the established 4H trend rather than presented with equal
-  // confidence to a trend-aligned signal.
+  // Same treatment as 3-Drive: included, but clearly flagged when the overall call fights the
+  // established 4H trend — and hidden by default (see the "with 4H trend only" switch on the tab).
   const trendConflict = (dir === 'bearish' && trend === 'up') || (dir === 'bullish' && trend === 'down');
 
   return { symbol: token.symbol, name: token.name, icon: token.icon || null, price: token.price, direction: dir,
-    rsi, range, ob, sr, pillarCount, score, grade, trend4h: trend, trendConflict };
+    rsi, ob, trend: tr, sr, vol, fund, pillarCount, score, raw: rawScore, grade, trend4h: trend, trendConflict,
+    plan: confluencePlan(token, dir) };
 }
 
-// Builds the full confluence list across all scanned tokens, both directions.
-// Called fresh each render — cheap (just arithmetic over already-fetched data).
-function buildConfluenceSignals(){
-  const out = [];
+// Builds the confluence list across all scanned tokens, both directions. Called fresh each render —
+// cheap (arithmetic over already-fetched data). Counter-trend calls are left out unless asked for.
+const CONF_TREND_ONLY_KEY = '3drive_conf_trend_only';
+function confTrendOnly(){ try { return localStorage.getItem(CONF_TREND_ONLY_KEY) !== '0'; } catch(e){ return true; } }
+function buildConfluenceSignals(opts){
+  const withTrendOnly = opts && opts.withTrendOnly != null ? opts.withTrendOnly : confTrendOnly();
+  const all = [];
   for(const token of tokenData){
     const bull = computeConfluenceSignal(token, 'bullish');
-    if(bull) out.push(bull);
+    if(bull) all.push(bull);
     const bear = computeConfluenceSignal(token, 'bearish');
-    if(bear) out.push(bear);
+    if(bear) all.push(bear);
   }
-  return out.sort((a,b) => b.score - a.score);
+  // Three agreeing pillars overshoot 100 almost every time, so ties at the cap are ordered by the uncapped
+  // score — otherwise the ranking would go flat exactly where the strongest signals are.
+  all.sort((a,b) => b.score - a.score || b.raw - a.raw || b.pillarCount - a.pillarCount);
+  const shown = withTrendOnly ? all.filter(x => !x.trendConflict) : all;
+  Object.defineProperty(shown, 'hidden', { value: all.length - shown.length, enumerable: false });
+  return shown;
 }
 
 function confPillarRow(icon, label, active, detail){
@@ -6318,14 +6440,35 @@ function confluenceCardHtml(sig){
   const rsiDetail = sig.rsi
     ? `${sig.rsi.both ? '1H+4H' : rsiWhichTf} ${(sig.rsi.r1h??sig.rsi.r4h).toFixed(0)}${sig.rsi.withTrend ? ' (pullback)' : ''}`
     : 'not extreme';
-  const rangeDetail = sig.range
-    ? sig.range.state.replace(/-/g,' ') + ` (${sig.range.grade})` + (sig.range.withTrend ? ' · with trend' : sig.range.againstTrend ? ' · counter-trend' : '')
-    : 'no active deviation';
   const obDetail = sig.ob ? `${sig.ob.imbalance>=0?'+':''}${(sig.ob.imbalance*100).toFixed(0)}%${sig.ob.wallConfirmed?' ✓':''}` : 'imbalance <50%';
-  const bonusHtml = sig.sr ? `<div class="conf-bonus-row">◎ S/R bonus — price at ${fmtPrice(sig.sr.level)}</div>` : '';
+  const arrow = dir === 'bullish' ? '▲' : '▼';
+  let trendDetail = '4H and 1H not both ' + (dir === 'bullish' ? 'bull' : 'bear');
+  if(sig.trend){
+    const t = sig.trend;
+    const ago = t.arrow1Time != null ? Math.max(0, Date.now() - t.arrow1Time) : null;
+    trendDetail = `4H ${arrow} · 1H ${arrow}` + (t.fresh1 && ago != null ? ` · arrow ${xoFmtAgo(ago)}` : t.fresh4 ? ' · fresh 4H arrow' : '') + (t.choppy ? ' · ⚠ choppy' : '');
+  }
+
+  const bonus = [];
+  if(sig.sr) bonus.push(`<div class="conf-bonus-row">◎ S/R — price at ${fmtPrice(sig.sr.level)}</div>`);
+  if(sig.vol) bonus.push(`<div class="conf-bonus-row">▮ Volume ${sig.vol.ratio.toFixed(1)}× the 20-candle average</div>`);
+  if(sig.fund){
+    const f = sig.fund, r = (f.rate >= 0 ? '+' : '') + f.rate.toFixed(3) + '%';
+    bonus.push(f.state === 'crowded'
+      ? `<div class="conf-bonus-row conf-trend-warn">⚠ Funding ${r} — crowded ${dir === 'bullish' ? 'long' : 'short'}</div>`
+      : `<div class="conf-bonus-row">${f.state === 'supportive' ? '✓' : '·'} Funding ${r} (${f.state})</div>`);
+  }
   const trendHtml = sig.trendConflict
     ? `<div class="conf-bonus-row conf-trend-warn">⚠ AGAINST 4H TREND (4H is ${sig.trend4h})</div>`
     : (sig.trend4h !== 'neutral' ? `<div class="conf-bonus-row conf-trend-ok">✓ aligned with 4H ${sig.trend4h}trend</div>` : '');
+
+  const pl = sig.plan;
+  const planHtml = pl
+    ? `<div class="conf-plan" title="Stop: ${pl.stopBasis}. Target: ${pl.targetBasis}.">
+         <span>entry ${fmtPrice(pl.entry)}</span><span>stop ${fmtPrice(pl.sl)} <em>(${pl.riskPct.toFixed(1)}%)</em></span><span>target ${fmtPrice(pl.tp)}</span><span class="conf-plan-rr">${pl.rr}R</span>
+       </div>`
+    : '';
+  const logBtn = `<button type="button" class="conf-log-btn" onclick="event.stopPropagation();confLogTrade('${sig.symbol}','${dir}')" title="Open the journal with entry, stop and target filled in — you review before saving">＋ Log trade</button>`;
 
   return `<div class="conf-card conf-${dir}" onclick="window.open(tvUrl('${sig.symbol}','ONE_HOUR'),'_blank')" title="Open ${sig.symbol} on TradingView">
     <div class="conf-card-header">
@@ -6345,11 +6488,13 @@ function confluenceCardHtml(sig){
     <div class="conf-bar-track"><div class="conf-bar-fill" style="width:${sig.score}%"></div></div>
     <div class="conf-pillars">
       ${confPillarRow('R', 'RSI', !!sig.rsi, rsiDetail)}
-      ${confPillarRow('◈', 'Range', !!sig.range, rangeDetail)}
       ${confPillarRow('▤', 'Order Book', !!sig.ob, obDetail)}
+      ${confPillarRow(dir==='bullish'?'↗':'↘', 'Trend (XO)', !!sig.trend, trendDetail)}
     </div>
-    ${bonusHtml}
+    ${bonus.join('')}
     ${trendHtml}
+    ${planHtml}
+    ${logBtn}
   </div>`;
 }
 
@@ -6375,6 +6520,11 @@ function conf3DriveCardHtml(token, tf, p){
   </div>`;
 }
 
+function setConfTrendOnly(on){
+  try { localStorage.setItem(CONF_TREND_ONLY_KEY, on ? '1' : '0'); } catch(e){}
+  renderConfluence();
+}
+
 function renderConfluence(){
   const driveGrid = document.getElementById('conf3DriveGrid');
   const confGrid = document.getElementById('confSignalGrid');
@@ -6395,9 +6545,16 @@ function renderConfluence(){
 
   // Confluence signals
   const signals = buildConfluenceSignals();
+  const trendOnly = confTrendOnly();
+  const tb = document.getElementById('confTrendOnlyBtn');
+  if(tb){ tb.setAttribute('aria-pressed', String(trendOnly)); tb.classList.toggle('active', trendOnly); }
+  const hid = document.getElementById('confHiddenNote');
+  if(hid) hid.textContent = trendOnly && signals.hidden ? `${signals.hidden} counter-trend signal${signals.hidden > 1 ? 's' : ''} hidden` : '';
   confGrid.innerHTML = signals.length
     ? signals.map(confluenceCardHtml).join('')
-    : '<div class="gl-empty">No confluence signals this scan — needs 2 of RSI/Range/Order Book concrete in the same direction.</div>';
+    : '<div class="gl-empty">No confluence signals this scan — needs 2 of RSI / Order Book / Trend (XO) concrete in the same direction.</div>';
+  // funding arrives on its own clock — fetch it (at most every 5 min) and redraw once it lands
+  if(Date.now() - fundingFetchedAt > 5 * 60 * 1000 && tokenData.length) refreshFunding().then(ok => { if(ok && currentView === 'confluence') renderConfluence(); });
 
   const upd = document.getElementById('confUpdated');
   if(upd) upd.textContent = 'last update: '+new Date().toLocaleTimeString();
@@ -7298,7 +7455,7 @@ function renderJournalDay(days) {
           </div>
           <div class="form-group">
             <label class="form-label" for="jLeverage">Leverage</label>
-            <input class="form-input" id="jLeverage" type="number" min="1" max="100" step="1" value="10" oninput="jUpdatePosCalc()">
+            <input class="form-input" id="jLeverage" type="number" min="1" max="100" step="1" value="${jLastLeverage()}" oninput="jUpdatePosCalc()">
           </div>
           <div class="form-group">
             <label class="form-label" for="jEntry">Entry</label>
@@ -7470,6 +7627,55 @@ function calcWeeklyBalance(weekTrades, startingBalance, riskAmount) {
   };
 }
 
+// Remember the leverage you actually use — the form used to snap back to 10 after every save.
+const J_LEV_KEY = '3drive_last_leverage';
+function jLastLeverage(){
+  try { const v = parseFloat(localStorage.getItem(J_LEV_KEY)); return v >= 1 && v <= 100 ? v : 10; } catch(e){ return 10; }
+}
+
+// "Log trade" on a confluence card: open today's journal with the form filled in. Nothing is saved
+// until you press Save Trade, so entry / stop / target are yours to change.
+let jSignalMeta = null;
+function jLogFromSignal(meta){
+  jWeekOffset = 0;                        // always land on the current week, whichever one you were browsing
+  openJournal();                          // selects today and renders the day (with the add-trade form)
+  jToggleForm();
+  const set = (id, v) => { const el = document.getElementById(id); if(el && v != null) el.value = v; };
+  set('jToken', meta.symbol);
+  set('jDir', meta.dir);
+  set('jTf', meta.tf);
+  set('jLeverage', jLastLeverage());
+  set('jEntry', meta.entry);
+  set('jSl', meta.sl);
+  set('jTp', meta.tp);
+  set('jNotes', meta.notes);
+  set('jResult', 'open');                 // a fresh signal is an open trade (the form's default is Win)
+  jSignalMeta = meta;
+  jUpdatePosCalc();
+}
+function confLogTrade(symbol, dir){
+  const token = findTokenBySymbol(symbol);
+  if(!token) return;
+  const sig = computeConfluenceSignal(token, dir);
+  const plan = (sig && sig.plan) || confluencePlan(token, dir);
+  if(!plan) return;
+  const parts = [];
+  if(sig){
+    parts.push(`Confluence ${sig.grade} (${sig.score})`);
+    parts.push([sig.rsi ? 'RSI' : null, sig.ob ? 'Order Book' : null, sig.trend ? 'Trend' : null].filter(Boolean).join(' + '));
+    if(sig.sr) parts.push('at S/R');
+    if(sig.vol) parts.push(`vol ${sig.vol.ratio.toFixed(1)}x`);
+    if(sig.fund) parts.push(`funding ${sig.fund.rate >= 0 ? '+' : ''}${sig.fund.rate.toFixed(3)}%`);
+  }
+  parts.push(`stop ${plan.stopBasis}`, `target ${plan.targetBasis}`);
+  jLogFromSignal({
+    symbol, dir: dir === 'bullish' ? 'long' : 'short', tf: '1H',
+    entry: plan.entry, sl: plan.sl, tp: plan.tp,
+    notes: parts.join(' · '),
+    setup: 'confluence', score: sig ? sig.score : null, grade: sig ? sig.grade : null
+  });
+}
+
 function jToggleForm() {
   const f = document.getElementById('addTradeForm');
   f.classList.toggle('open');
@@ -7566,6 +7772,7 @@ function jSaveTrade(dateKey) {
     tp:         tp||null,
     slHistory:  [{ time: now.toISOString(), sl }],
     scaleOuts:  [],
+    ...(jSignalMeta && jSignalMeta.symbol === symbol ? { setup: jSignalMeta.setup, score: jSignalMeta.score, grade: jSignalMeta.grade } : {}),
     exit:       exit||null,
     result, notes,
     autoResolved: false,
@@ -7584,7 +7791,9 @@ function jSaveTrade(dateKey) {
     const el = document.getElementById(id);
     el.value=''; el.style.borderColor='';
   });
-  document.getElementById('jLeverage').value = '10'; // reset to a sane default, not blank
+  try { localStorage.setItem(J_LEV_KEY, String(leverage)); } catch(e){}
+  jSignalMeta = null;
+  document.getElementById('jLeverage').value = String(jLastLeverage()); // your last leverage, not a hard-coded 10
   document.getElementById('addTradeForm').classList.remove('open');
 
   renderJournalWeek();
@@ -8126,7 +8335,7 @@ document.addEventListener('keydown', function(e){
           </div>
         </div>
 
-        <p class="al-foot" id="alertStatus">Emails only go out when a signal lands <strong>at S/R confluence</strong> (the ◎ badge). Naked signals without S/R are ignored. Confluence means RSI + Range + Order Book agreeing.</p>
+        <p class="al-foot" id="alertStatus">Emails only go out when a signal lands <strong>at S/R confluence</strong> (the ◎ badge). Naked signals without S/R are ignored. Confluence means RSI, Order Book and the Trader XO trend agreeing (at least two of the three).</p>
         <div id="alertLastSent" class="al-row-hint" style="margin-top:4px"></div>
       </section>
 
@@ -8933,7 +9142,7 @@ async function confluenceAlertsCheck(){
     tf: '—',
     price: fmtPrice(sig.price),
     confidence: sig.score,
-    pillars: [sig.rsi ? 'RSI' : null, sig.range ? 'Range' : null, sig.ob ? 'Order Book' : null].filter(Boolean).join(' + '),
+    pillars: [sig.rsi ? 'RSI' : null, sig.ob ? 'Order Book' : null, sig.trend ? 'Trend (XO)' : null].filter(Boolean).join(' + '),
     srBonus: !!sig.sr,
     trendConflict: !!sig.trendConflict,
     trend4h: sig.trend4h,
