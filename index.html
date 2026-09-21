@@ -2281,6 +2281,97 @@ input.ctrl::placeholder { color: var(--text-3); }
 .tdp-pattern-tag.bearish { background: var(--red-dim); color: var(--red); }
 .tdp-pattern-tag.squeeze { background: rgba(139,92,246,0.15); color: #8b5cf6; }
 
+/* ═══════════════════════════════════════
+   ALERTS PANEL
+═══════════════════════════════════════ */
+.al-panel { width: min(560px, 100%); }
+.al-body { padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-4); overflow-y: auto; }
+.al-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--sp-4) var(--sp-5); }
+.al-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); }
+.al-card-title { margin: 0; font-family: var(--font-ui); font-size: 0.92rem; font-weight: 700; color: var(--text); letter-spacing: 0.2px; }
+.al-card-sub { margin: 3px 0 0; font-family: var(--font-ui); font-size: 0.7rem; color: var(--text-2); line-height: 1.4; }
+.al-group { margin-top: var(--sp-3); transition: opacity var(--t-normal) var(--ease-out); }
+.al-group.off { opacity: 0.45; }
+.al-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-3) 0; border-top: 1px solid var(--border); }
+.al-row:first-child { border-top: none; }
+.al-row.al-sub { padding-top: 0; border-top: none; margin-top: calc(-1 * var(--sp-1)); }
+.al-row[hidden] { display: none; }
+.al-row-text { min-width: 0; flex: 1; }
+.al-row-label { font-family: var(--font-ui); font-size: 0.78rem; font-weight: 600; color: var(--text); }
+.al-row-hint { font-family: var(--font-ui); font-size: 0.68rem; color: var(--text-2); margin-top: 2px; line-height: 1.4; }
+.al-row-hint.ok   { color: var(--green); }
+.al-row-hint.bad  { color: var(--red); }
+.al-row-hint.wait { color: var(--amber); }
+.al-controls { display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.al-field { padding: var(--sp-3) 0 0; border-top: 1px solid var(--border); }
+.al-field .al-row-label { margin-bottom: var(--sp-2); }
+.al-actions { display: flex; gap: var(--sp-2); padding-top: var(--sp-3); border-top: 1px solid var(--border); margin-top: var(--sp-3); }
+.al-foot { margin: var(--sp-3) 0 0; font-family: var(--font-ui); font-size: 0.66rem; color: var(--text-2); line-height: 1.55; }
+.al-banner { margin-top: var(--sp-3); padding: 8px var(--sp-3); border-radius: var(--r-md); font-family: var(--font-ui); font-size: 0.7rem; line-height: 1.4; }
+.al-banner.warn { background: var(--amber-dim); border: 1px solid rgba(255,170,0,0.35); color: var(--amber); }
+
+/* toggle switch (real checkbox underneath — keeps ids, keyboard and screen-reader behaviour) */
+.al-switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; cursor: pointer; }
+.al-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+.al-track { position: absolute; inset: 0; border-radius: 999px; background: var(--bg3); border: 1px solid var(--border); transition: background var(--t-fast), border-color var(--t-fast); }
+.al-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--text-2); transition: transform var(--t-fast) var(--ease-out), background var(--t-fast); }
+.al-switch input:checked + .al-track { background: var(--blue-dim); border-color: var(--blue); }
+.al-switch input:checked + .al-track::after { transform: translateX(18px); background: var(--blue); box-shadow: 0 0 8px rgba(6,229,208,0.5); }
+.al-switch input:focus-visible + .al-track { outline: 2px solid var(--blue); outline-offset: 2px; }
+.al-switch input:disabled { cursor: not-allowed; }
+.al-switch input:disabled + .al-track { opacity: 0.4; }
+
+/* toggle chips (timeframes, signal types) */
+.al-chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.al-chip { position: relative; cursor: pointer; }
+.al-chip input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.al-chip span { display: inline-flex; align-items: center; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: transparent; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-2); transition: all var(--t-fast) var(--ease-out); user-select: none; }
+.al-chip:hover span { border-color: var(--text-2); }
+.al-chip input:checked + span { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
+.al-chip.bull input:checked + span { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+.al-chip.bear input:checked + span { background: var(--red-dim); border-color: var(--red); color: var(--red); }
+.al-chip.purple input:checked + span { background: var(--purple-dim); border-color: var(--purple); color: var(--purple); }
+.al-chip input:focus-visible + span { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* buttons, inputs */
+.al-btn { background: transparent; border: 1px solid var(--border); color: var(--text-2); padding: 7px var(--sp-3); font-family: var(--font-ui); font-size: 0.72rem; font-weight: 600; border-radius: var(--r-md); cursor: pointer; white-space: nowrap; transition: all var(--t-fast) var(--ease-out); }
+.al-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); }
+.al-btn.accent { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); }
+.al-btn.accent:hover { box-shadow: var(--shadow-glow); }
+.al-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.al-btn:disabled { opacity: 0.5; cursor: default; }
+.al-input, .al-select { background: var(--bg3); border: 1px solid var(--border); color: var(--text); font-family: var(--font-mono); font-size: 0.74rem; padding: 7px var(--sp-3); border-radius: var(--r-md); outline: none; transition: border-color var(--t-fast); box-sizing: border-box; }
+.al-input:focus, .al-select:focus { border-color: var(--blue); }
+.al-input { width: 100%; }
+.al-range { display: flex; align-items: center; gap: var(--sp-3); }
+.al-range input[type=range] { flex: 1; min-width: 90px; accent-color: var(--blue); }
+.al-range output { font-family: var(--font-mono); font-size: 0.74rem; color: var(--blue); min-width: 38px; text-align: right; }
+
+/* muted-token tag box */
+.al-mutebox { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg3); min-height: 40px; cursor: text; transition: border-color var(--t-fast); }
+.al-mutebox:focus-within { border-color: var(--blue); }
+.al-tag { display: inline-flex; align-items: center; gap: 2px; padding: 3px 3px 3px 9px; border-radius: 6px; background: var(--bg2); border: 1px solid var(--border); font-family: var(--font-mono); font-size: 0.72rem; color: var(--text); }
+.al-tag button { background: none; border: none; color: var(--text-2); cursor: pointer; padding: 0 5px; font-size: 0.85rem; line-height: 1; border-radius: 4px; }
+.al-tag button:hover { color: var(--red); }
+.al-mutebox input { flex: 1; min-width: 120px; background: none; border: none; outline: none; color: var(--text); font-family: var(--font-mono); font-size: 0.74rem; text-transform: uppercase; padding: 4px 6px; }
+.al-mutebox input::placeholder { color: var(--text-3); text-transform: none; }
+
+/* recent arrows */
+.al-details { margin-top: var(--sp-3); border-top: 1px solid var(--border); padding-top: var(--sp-3); }
+.al-details summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: var(--sp-2); font-family: var(--font-ui); font-size: 0.74rem; font-weight: 600; color: var(--text-2); }
+.al-details summary::-webkit-details-marker { display: none; }
+.al-details summary::before { content: '▸'; font-size: 0.7rem; transition: transform var(--t-fast); }
+.al-details[open] summary::before { transform: rotate(90deg); }
+.al-details summary:hover { color: var(--text); }
+.al-count { font-family: var(--font-mono); font-size: 0.64rem; color: var(--text-2); background: var(--bg3); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; }
+.al-details .al-empty { font-family: var(--font-ui); font-size: 0.7rem; color: var(--text-2); padding: var(--sp-2) 0 0; }
+
+@media (max-width: 520px) {
+  .al-card { padding: var(--sp-4); }
+  .al-row { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) { .al-track, .al-track::after, .al-chip span, .al-group { transition: none; } }
+
 /* ── Trader XO trend arrows: token popup rows + in-app toasts ── */
 .tdp-xo-sub { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-3); padding: 0 0 5px; line-height: 1.5; }
 .tdp-xo-sub .warn { color: var(--amber); }
@@ -2310,7 +2401,7 @@ input.ctrl::placeholder { color: var(--text-3); }
 .xo-toast-x:hover { color: var(--text); }
 @keyframes xoToastIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .xo-toast { animation: none; } }
-.xo-hist-row { display: flex; gap: var(--sp-2); align-items: center; font-family: var(--font-mono); font-size: 0.64rem; color: var(--text-2); padding: 3px 0; }
+.xo-hist-row { display: flex; gap: var(--sp-2); align-items: center; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-2); padding: 4px 0; }
 .xo-hist-row button { background: none; border: none; padding: 0; cursor: pointer; font: inherit; color: var(--text); font-weight: 700; }
 .xo-hist-row button:hover { color: var(--blue); }
 .xo-hist-row .when { color: var(--text-3); margin-left: auto; }
@@ -7709,98 +7800,141 @@ document.addEventListener('keydown', function(e){
 
 <!-- ALERTS MODAL -->
 <div class="journal-overlay" id="alertsOverlay" onclick="if(event.target===this)closeAlerts()">
-  <div class="journal-panel" style="max-width:480px" role="dialog" aria-modal="true" aria-label="Alerts">
+  <div class="journal-panel al-panel" role="dialog" aria-modal="true" aria-labelledby="alTitle">
     <div class="journal-header">
-      <div class="journal-title">🔔 ALERTS</div>
+      <div class="journal-title" id="alTitle">🔔 ALERTS</div>
       <button class="journal-close" onclick="closeAlerts()" aria-label="Close alerts">✕</button>
     </div>
-    <div style="padding:var(--sp-4);display:flex;flex-direction:column;gap:var(--sp-4)">
+    <div class="al-body">
 
-      <!-- Trend shifts — Trader XO (in-app + desktop, no email) -->
-      <div>
-        <div style="font-family:var(--font-mono);font-size:0.6rem;color:var(--text-3);letter-spacing:1.5px;margin-bottom:var(--sp-2)">TREND SHIFTS · TRADER XO (EMA 12 / 50)</div>
-        <div style="display:flex;flex-direction:column;gap:var(--sp-2)">
-          <label style="display:flex;align-items:center;gap:var(--sp-2);font-family:var(--font-mono);font-size:0.7rem;color:var(--text-2);cursor:pointer">
-            <input type="checkbox" id="xoEnabled" onchange="xoSaveSettingsFromUI()" style="accent-color:var(--blue)"> Notify me when a Bull / Bear arrow prints
-          </label>
-          <div style="display:flex;gap:var(--sp-4);flex-wrap:wrap;padding-left:22px">
-            <label style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:0.68rem;color:var(--text-2);cursor:pointer"><input type="checkbox" id="xoTf4h" onchange="xoSaveSettingsFromUI()" style="accent-color:var(--blue)"> 4H</label>
-            <label style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:0.68rem;color:var(--text-2);cursor:pointer"><input type="checkbox" id="xoTf1h" onchange="xoSaveSettingsFromUI()" style="accent-color:var(--blue)"> 1H</label>
-            <label style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:0.68rem;color:var(--text-2);cursor:pointer"><input type="checkbox" id="xoTf30m" onchange="xoSaveSettingsFromUI()" style="accent-color:var(--blue)"> 30M</label>
-          </div>
-          <label style="display:flex;align-items:center;gap:var(--sp-2);font-family:var(--font-mono);font-size:0.7rem;color:var(--text-2);cursor:pointer">
-            <input type="checkbox" id="xoDesktop" onchange="xoSaveSettingsFromUI()" style="accent-color:var(--blue)"> Also show as a desktop notification
-          </label>
+      <!-- TREND SHIFTS · Trader XO — in-app + desktop + sound, no email -->
+      <section class="al-card" aria-labelledby="alTrendTitle">
+        <div class="al-card-head">
           <div>
-            <label for="xoMuted" style="display:block;font-family:var(--font-mono);font-size:0.6rem;color:var(--text-3);letter-spacing:1.5px;margin:var(--sp-1) 0 var(--sp-2)">MUTED TOKENS (NO TREND NOTIFICATIONS)</label>
-            <input id="xoMuted" type="text" placeholder="e.g. DOGE, SHIB, PEPE" autocomplete="off" spellcheck="false"
-              style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:0.72rem;padding:7px var(--sp-3);border-radius:var(--r-md);outline:none;text-transform:uppercase"
-              onchange="xoSaveSettingsFromUI();this.value=xoLoadSettings().muted.join(', ')">
-            <div style="font-family:var(--font-ui);font-size:0.58rem;color:var(--text-3);margin-top:4px">Comma-separated tickers. Muted tokens still show their trend in the token popup — only the notifications are skipped. You can also hit “mute” on any popup.</div>
+            <h3 class="al-card-title" id="alTrendTitle">Trend shifts</h3>
+            <p class="al-card-sub">Trader XO · Bull / Bear arrow when EMA 12 crosses EMA 50 on a closed candle</p>
           </div>
-          <div style="display:flex;gap:var(--sp-2);align-items:center;flex-wrap:wrap">
-            <button class="journal-btn" id="xoEnableBtn" onclick="xoEnableDesktop()">enable desktop notifications</button>
-            <button class="journal-btn" onclick="xoSendTest()">send test</button>
+          <label class="al-switch" title="Turn trend-shift notifications on or off">
+            <input type="checkbox" id="xoEnabled" onchange="xoSaveSettingsFromUI()" aria-label="Trend-shift notifications">
+            <span class="al-track"></span>
+          </label>
+        </div>
+        <div class="al-banner warn" id="xoAutoScanWarn" style="display:none">Auto-scan is off, so arrows are only checked when you press Scan Now.</div>
+
+        <div class="al-group" id="xoGroup">
+          <div class="al-row">
+            <div class="al-row-text">
+              <div class="al-row-label">Timeframes</div>
+              <div class="al-row-hint">30M fires far more often, so it is opt-in</div>
+            </div>
+            <div class="al-chips" role="group" aria-label="Timeframes to notify on">
+              <label class="al-chip"><input type="checkbox" id="xoTf4h" onchange="xoSaveSettingsFromUI()"><span>4H</span></label>
+              <label class="al-chip"><input type="checkbox" id="xoTf1h" onchange="xoSaveSettingsFromUI()"><span>1H</span></label>
+              <label class="al-chip"><input type="checkbox" id="xoTf30m" onchange="xoSaveSettingsFromUI()"><span>30M</span></label>
+            </div>
           </div>
-          <div id="xoDesktopStatus" style="font-family:var(--font-mono);font-size:0.6rem;color:var(--text-3)" aria-live="polite"></div>
-          <div id="xoAutoScanWarn" style="display:none;font-family:var(--font-mono);font-size:0.6rem;color:var(--amber)">⚠ Auto-scan is off — arrows are only checked when you press Scan Now.</div>
-          <div style="font-family:var(--font-ui);font-size:0.6rem;color:var(--text-3);line-height:1.5">Arrows are checked on closed candles at the end of every scan, so this only works while the app is open and auto-scan is on. 4H and 1H are on by default; 30M is opt-in because it fires a lot more often.</div>
+
+          <div class="al-row">
+            <div class="al-row-text">
+              <div class="al-row-label">Desktop notification</div>
+              <div class="al-row-hint" id="xoDesktopStatus" aria-live="polite"></div>
+            </div>
+            <div class="al-controls">
+              <button class="al-btn accent" id="xoEnableBtn" type="button" onclick="xoEnableDesktop()">Allow</button>
+              <label class="al-switch" title="Show a desktop notification">
+                <input type="checkbox" id="xoDesktop" onchange="xoSaveSettingsFromUI()" aria-label="Desktop notification">
+                <span class="al-track"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="al-row">
+            <div class="al-row-text">
+              <div class="al-row-label">Sound</div>
+              <div class="al-row-hint">Rising tone for a Bull arrow, falling tone for Bear</div>
+            </div>
+            <label class="al-switch" title="Play a sound when an arrow prints">
+              <input type="checkbox" id="xoSound" onchange="xoSaveSettingsFromUI()" aria-label="Sound">
+              <span class="al-track"></span>
+            </label>
+          </div>
+          <div class="al-row al-sub" id="xoSoundOpts" hidden>
+            <div class="al-controls" style="flex:1;justify-content:flex-start;width:100%">
+              <select class="al-select" id="xoSoundStyle" onchange="xoSaveSettingsFromUI();xoPreviewSound()" aria-label="Sound style">
+                <option value="chime">Chime</option>
+                <option value="ping">Ping</option>
+                <option value="alarm">Alarm</option>
+              </select>
+              <div class="al-range" style="flex:1;min-width:150px">
+                <input type="range" id="xoSoundVol" min="0" max="100" step="5" oninput="xoSaveSettingsFromUI()" aria-label="Volume">
+                <output id="xoSoundVolVal" for="xoSoundVol">60%</output>
+              </div>
+              <button class="al-btn" type="button" onclick="xoPreviewSound()">▶ Preview</button>
+            </div>
+          </div>
+
+          <div class="al-field">
+            <div class="al-row-label" id="xoMutedLabel">Muted tokens</div>
+            <div class="al-mutebox" id="xoMutedBox" onclick="document.getElementById('xoMutedInput').focus()">
+              <span id="xoMutedTags" style="display:contents"></span>
+              <input id="xoMutedInput" type="text" placeholder="Add a ticker, e.g. DOGE" autocomplete="off" spellcheck="false" aria-labelledby="xoMutedLabel"
+                onkeydown="xoMutedKeydown(event)" onblur="xoAddMutedFromInput()">
+            </div>
+            <div class="al-row-hint" style="margin-top:6px">Muted tokens never notify, but still show their trend in the token popup. You can also hit “mute” on any popup.</div>
+          </div>
+
+          <div class="al-actions">
+            <button class="al-btn" type="button" onclick="xoSendTest()">Send test alert</button>
+          </div>
+        </div>
+
+        <details class="al-details" id="xoHistoryWrap">
+          <summary>Recent arrows <span class="al-count" id="xoHistoryCount">0</span></summary>
           <div id="xoHistory"></div>
+        </details>
+        <p class="al-foot">Checked at the end of every scan, so this only works while the app is open and auto-scan is on. Desktop notifications are silent on purpose; the sound option above is what makes noise.</p>
+      </section>
+
+      <!-- EMAIL ALERTS · 3-Drive / squeeze / confluence -->
+      <section class="al-card" aria-labelledby="alEmailTitle">
+        <div class="al-card-head">
+          <div>
+            <h3 class="al-card-title" id="alEmailTitle">Email alerts</h3>
+            <p class="al-card-sub">3-Drive, squeeze and confluence signals sent to your inbox</p>
+          </div>
         </div>
-      </div>
 
-      <div style="height:1px;background:var(--border)"></div>
-
-      <!-- Email input -->
-      <div>
-        <label for="alertEmail" style="display:block;font-family:var(--font-mono);font-size:0.6rem;color:var(--text-3);letter-spacing:1.5px;margin-bottom:var(--sp-2)">YOUR EMAIL</label>
-        <div style="display:flex;gap:var(--sp-2)">
-          <input id="alertEmail" type="email" placeholder="you@example.com"
-            style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);
-                   font-family:var(--font-mono);font-size:0.72rem;padding:7px var(--sp-3);
-                   border-radius:var(--r-md);outline:none"
-            oninput="alertSaveEmail()">
-          <button class="journal-btn" onclick="alertSendTest()" id="alertTestBtn">send test</button>
+        <div class="al-field" style="border-top:none;margin-top:var(--sp-3)">
+          <label class="al-row-label" for="alertEmail" style="display:block">Your email</label>
+          <div style="display:flex;gap:var(--sp-2)">
+            <input id="alertEmail" class="al-input" type="email" placeholder="you@example.com" oninput="alertSaveEmail()">
+            <button class="al-btn" id="alertTestBtn" type="button" onclick="alertSendTest()">Send test</button>
+          </div>
+          <div id="alertEmailStatus" class="al-row-hint" style="margin-top:6px" aria-live="polite"></div>
         </div>
-        <div id="alertEmailStatus" style="font-family:var(--font-mono);font-size:0.6rem;margin-top:5px;color:var(--text-3)" aria-live="polite"></div>
-      </div>
 
-      <!-- Threshold -->
-      <div>
-        <label for="alertThreshold" style="display:block;font-family:var(--font-mono);font-size:0.6rem;color:var(--text-3);letter-spacing:1.5px;margin-bottom:var(--sp-2)">MIN CONFIDENCE TO ALERT</label>
-        <div style="display:flex;align-items:center;gap:var(--sp-3)">
-          <input id="alertThreshold" type="range" min="60" max="99" step="5" value="80"
-            oninput="document.getElementById('alertThresholdVal').textContent=this.value+'%';alertSaveSettings()"
-            style="flex:1;accent-color:var(--blue)">
-          <span id="alertThresholdVal" style="font-family:var(--font-mono);font-size:0.8rem;color:var(--blue);min-width:36px">80%</span>
+        <div class="al-field">
+          <label class="al-row-label" for="alertThreshold" style="display:block">Minimum confidence</label>
+          <div class="al-range">
+            <input id="alertThreshold" type="range" min="60" max="99" step="5" value="80"
+              oninput="document.getElementById('alertThresholdVal').textContent=this.value+'%';alertSaveSettings()">
+            <output id="alertThresholdVal" for="alertThreshold">80%</output>
+          </div>
         </div>
-      </div>
 
-      <!-- Alert types -->
-      <div>
-        <div style="font-family:var(--font-mono);font-size:0.6rem;color:var(--text-3);letter-spacing:1.5px;margin-bottom:var(--sp-2)">ALERT ON</div>
-        <div style="display:flex;flex-direction:column;gap:var(--sp-2)">
-          <label style="display:flex;align-items:center;gap:var(--sp-2);font-family:var(--font-mono);font-size:0.7rem;color:var(--text-2);cursor:pointer">
-            <input type="checkbox" id="alertOnBull" checked onchange="alertSaveSettings()" style="accent-color:var(--green)"> ↑ Bullish 3-Drive signals
-          </label>
-          <label style="display:flex;align-items:center;gap:var(--sp-2);font-family:var(--font-mono);font-size:0.7rem;color:var(--text-2);cursor:pointer">
-            <input type="checkbox" id="alertOnBear" checked onchange="alertSaveSettings()" style="accent-color:var(--red)"> ↓ Bearish 3-Drive signals
-          </label>
-          <label style="display:flex;align-items:center;gap:var(--sp-2);font-family:var(--font-mono);font-size:0.7rem;color:var(--text-2);cursor:pointer">
-            <input type="checkbox" id="alertOnSqueeze" onchange="alertSaveSettings()" style="accent-color:var(--purple)"> ◈ BB Squeeze signals
-          </label>
-          <label style="display:flex;align-items:center;gap:var(--sp-2);font-family:var(--font-mono);font-size:0.7rem;color:var(--text-2);cursor:pointer">
-            <input type="checkbox" id="alertOnConfluence" onchange="alertSaveSettings()" style="accent-color:var(--blue)"> ⬢ Confluence signals (RSI+Range+OrderBook)
-          </label>
+        <div class="al-field">
+          <div class="al-row-label">Alert on</div>
+          <div class="al-chips" role="group" aria-label="Signal types to email">
+            <label class="al-chip bull"><input type="checkbox" id="alertOnBull" checked onchange="alertSaveSettings()"><span>↑ Bullish 3-Drive</span></label>
+            <label class="al-chip bear"><input type="checkbox" id="alertOnBear" checked onchange="alertSaveSettings()"><span>↓ Bearish 3-Drive</span></label>
+            <label class="al-chip purple"><input type="checkbox" id="alertOnSqueeze" onchange="alertSaveSettings()"><span>◈ BB Squeeze</span></label>
+            <label class="al-chip"><input type="checkbox" id="alertOnConfluence" onchange="alertSaveSettings()"><span>⬢ Confluence</span></label>
+          </div>
         </div>
-      </div>
 
-      <!-- Status -->
-      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-md);padding:var(--sp-3)">
-        <div style="font-family:var(--font-mono);font-size:0.6rem;color:var(--text-3);letter-spacing:1.5px;margin-bottom:var(--sp-2)">STATUS</div>
-        <div id="alertStatus" style="font-family:var(--font-mono);font-size:0.68rem;color:var(--text-2)">Alerts only fire when a signal lands <strong>at S/R confluence</strong> (◎ badge). Naked signals without S/R are ignored.</div>
-        <div id="alertLastSent" style="font-family:var(--font-mono);font-size:0.6rem;color:var(--text-3);margin-top:4px"></div>
-      </div>
+        <p class="al-foot" id="alertStatus">Emails only go out when a signal lands <strong>at S/R confluence</strong> (the ◎ badge). Naked signals without S/R are ignored. Confluence means RSI + Range + Order Book agreeing.</p>
+        <div id="alertLastSent" class="al-row-hint" style="margin-top:4px"></div>
+      </section>
 
     </div>
   </div>
@@ -7862,6 +7996,7 @@ const XO_TOAST_MS = 45000;
 const XO_TFS = ['SIX_HOUR','ONE_HOUR','THIRTY_MINUTE'];
 const XO_TF_UI = { SIX_HOUR:'xoTf4h', ONE_HOUR:'xoTf1h', THIRTY_MINUTE:'xoTf30m' };
 
+const XO_SOUND_STYLES = ['chime','ping','alarm'];
 function xoLoadSettings(){
   let s = {};
   try { s = JSON.parse(localStorage.getItem(XO_SETTINGS_KEY) || '{}') || {}; } catch(e){}
@@ -7870,7 +8005,10 @@ function xoLoadSettings(){
     enabled: s.enabled !== false,
     desktop: s.desktop !== false,
     tfs: { SIX_HOUR: t.SIX_HOUR !== false, ONE_HOUR: t.ONE_HOUR !== false, THIRTY_MINUTE: !!t.THIRTY_MINUTE },
-    muted: xoParseSymbols(s.muted)
+    muted: xoParseSymbols(s.muted),
+    sound: !!s.sound,                                                     // off until you opt in
+    soundStyle: XO_SOUND_STYLES.includes(s.soundStyle) ? s.soundStyle : 'chime',
+    soundVol: typeof s.soundVol === 'number' && s.soundVol >= 0 && s.soundVol <= 1 ? s.soundVol : 0.6
   };
 }
 // Symbols the user never wants arrow notifications for. Accepts an array or free text
@@ -7884,15 +8022,27 @@ function xoParseSymbols(v){
   });
   return out;
 }
+function xoStoreSettings(s){ try { localStorage.setItem(XO_SETTINGS_KEY, JSON.stringify(s)); } catch(e){} }
 function xoSaveSettingsFromUI(){
   const s = {
     enabled: document.getElementById('xoEnabled').checked,
     desktop: document.getElementById('xoDesktop').checked,
     tfs: {},
-    muted: xoParseSymbols(document.getElementById('xoMuted').value)
+    muted: xoLoadSettings().muted,            // edited through the tag box, not read back from the DOM
+    sound: document.getElementById('xoSound').checked,
+    soundStyle: document.getElementById('xoSoundStyle').value,
+    soundVol: Math.max(0, Math.min(100, +document.getElementById('xoSoundVol').value || 0)) / 100
   };
   XO_TFS.forEach(tf => { s.tfs[tf] = document.getElementById(XO_TF_UI[tf]).checked; });
-  try { localStorage.setItem(XO_SETTINGS_KEY, JSON.stringify(s)); } catch(e){}
+  xoStoreSettings(s);
+  xoSyncUi();
+}
+// Dependent controls: dim everything when the master switch is off, show sound options only when sound is on.
+function xoSyncUi(){
+  const on = document.getElementById('xoEnabled').checked;
+  document.getElementById('xoGroup').classList.toggle('off', !on);
+  document.getElementById('xoSoundOpts').hidden = !document.getElementById('xoSound').checked;
+  document.getElementById('xoSoundVolVal').textContent = document.getElementById('xoSoundVol').value + '%';
 }
 function xoLoadSeen(){
   try {
@@ -7969,23 +8119,80 @@ function xoDeliver(items, opts){
   items.slice(0, MAX_TOASTS).forEach(xoShowToast);
   if(items.length > MAX_TOASTS) xoShowSummaryToast(items.length - MAX_TOASTS);
 
+  // One sound per delivery, however many arrows: rising = all Bull, falling = all Bear, neutral = mixed.
+  if(s.sound){
+    const dirs = new Set(items.map(i => i.dir));
+    xoPlaySound(dirs.size === 1 ? [...dirs][0] : 'mixed', s.soundStyle, s.soundVol);
+  }
+
   if(s.desktop && 'Notification' in window && Notification.permission === 'granted'){
+    // silent: the in-app sound option is the single control for noise — otherwise the OS ding would
+    // double up with it, or play when you'd switched sound off.
     try {
       if(items.length <= 3){
         items.forEach(i => {
           const n = new Notification(`${i.dir==='bull'?'▲':'▼'} ${i.symbol} · ${TF_LABELS[i.tf]} trend turned ${i.dir==='bull'?'BULL':'BEAR'}`, {
             body: `EMA 12 crossed ${i.dir==='bull'?'above':'below'} EMA 50 at ${fmtPrice(i.price)}${opts.test?' (test)':''}`,
-            tag: `xo-${i.symbol}-${i.tf}-${i.time}`
+            tag: `xo-${i.symbol}-${i.tf}-${i.time}`,
+            silent: true
           });
           n.onclick = () => { window.focus(); n.close(); if(!opts.test) openTokenDetail(i.symbol); };
         });
       } else {
         const list = items.slice(0, 6).map(i => `${i.dir==='bull'?'▲':'▼'} ${i.symbol} ${TF_LABELS[i.tf]}`).join(' · ');
-        const n = new Notification(`${items.length} trend shifts`, { body: list + (items.length > 6 ? ` · +${items.length-6} more` : ''), tag: 'xo-summary' });
+        const n = new Notification(`${items.length} trend shifts`, { body: list + (items.length > 6 ? ` · +${items.length-6} more` : ''), tag: 'xo-summary', silent: true });
         n.onclick = () => { window.focus(); n.close(); };
       }
     } catch(e){ /* some browsers only allow notifications from a service worker — toasts still work */ }
   }
+}
+
+// ── Sound ──
+// Synthesised with WebAudio, so there are no audio files to host or fail to load. Browsers keep audio
+// suspended until the page has had a click or keypress, so the context is unlocked on the first one;
+// if an arrow lands before that, the sound is skipped (and logged) rather than queued to blurt out later.
+let xoAudioCtx = null;
+function xoUnlockAudio(){
+  try {
+    if(!xoAudioCtx){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC) return;
+      xoAudioCtx = new AC();
+    }
+    if(xoAudioCtx.state === 'suspended') xoAudioCtx.resume();
+  } catch(e){}
+}
+['pointerdown','keydown'].forEach(ev => document.addEventListener(ev, xoUnlockAudio, { passive:true }));
+const XO_SOUNDS = {
+  chime: { wave:'sine',     dur:0.34, gap:0.17, peak:0.5,  bull:[659.25, 987.77],        bear:[987.77, 659.25],        mixed:[783.99] },
+  ping:  { wave:'triangle', dur:0.14, gap:0.09, peak:0.45, bull:[880, 1174.66],           bear:[1174.66, 880],           mixed:[987.77] },
+  alarm: { wave:'square',   dur:0.16, gap:0.07, peak:0.16, bull:[698.46, 880, 1046.5],    bear:[1046.5, 880, 698.46],    mixed:[880, 880] }
+};
+function xoPlaySound(kind, style, vol){
+  xoUnlockAudio();
+  const ctx = xoAudioCtx;
+  if(!ctx) return;
+  if(ctx.state !== 'running'){ log('Trend sound skipped — the browser blocks audio until you click on the page once', 'warn'); return; }
+  const def = XO_SOUNDS[style] || XO_SOUNDS.chime;
+  const notes = def[kind] || def.mixed;
+  let t = ctx.currentTime + 0.03;
+  notes.forEach(freq => {
+    const osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = def.wave;
+    osc.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, def.peak * vol), t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + def.dur);
+    osc.connect(g); g.connect(ctx.destination);
+    osc.start(t); osc.stop(t + def.dur + 0.02);
+    t += def.gap;
+  });
+}
+function xoPreviewSound(){
+  const st = document.getElementById('xoSoundStyle').value;
+  const vol = (+document.getElementById('xoSoundVol').value || 0) / 100;
+  xoPlaySound('bull', st, vol);
+  setTimeout(() => xoPlaySound('bear', st, vol), 900);
 }
 
 function xoShowToast(i){
@@ -8035,30 +8242,70 @@ function xoShowSummaryToast(n){
 
 function xoMuteSymbol(sym){
   const s = xoLoadSettings();
-  const muted = xoParseSymbols(s.muted.concat([sym]));
-  s.muted = muted;
-  try { localStorage.setItem(XO_SETTINGS_KEY, JSON.stringify(s)); } catch(e){}
-  const inp = document.getElementById('xoMuted');
-  if(inp) inp.value = muted.join(', ');
+  s.muted = xoParseSymbols(s.muted.concat([sym]));
+  xoStoreSettings(s);
+  xoRenderMuted();
+}
+function xoUnmuteSymbol(sym){
+  const s = xoLoadSettings();
+  s.muted = s.muted.filter(x => x !== sym);
+  xoStoreSettings(s);
+  xoRenderMuted();
+}
+function xoRenderMuted(){
+  const box = document.getElementById('xoMutedTags');
+  if(!box) return;
+  box.textContent = '';
+  xoLoadSettings().muted.forEach(sym => {
+    const tag = document.createElement('span'); tag.className = 'al-tag'; tag.textContent = sym;
+    const x = document.createElement('button'); x.type = 'button'; x.textContent = '✕';
+    x.setAttribute('aria-label', `Unmute ${sym}`); x.title = `Unmute ${sym}`;
+    x.addEventListener('click', e => { e.stopPropagation(); xoUnmuteSymbol(sym); });
+    tag.appendChild(x);
+    box.appendChild(tag);
+  });
+}
+function xoAddMutedFromInput(){
+  const inp = document.getElementById('xoMutedInput');
+  if(!inp) return;
+  const syms = xoParseSymbols(inp.value);
+  inp.value = '';
+  if(syms.length){
+    const s = xoLoadSettings();
+    s.muted = xoParseSymbols(s.muted.concat(syms));
+    xoStoreSettings(s);
+    xoRenderMuted();
+  }
+}
+function xoMutedKeydown(e){
+  if(e.key === 'Enter' || e.key === ',' || e.key === ' '){ e.preventDefault(); xoAddMutedFromInput(); }
+  else if(e.key === 'Backspace' && !e.target.value){
+    const m = xoLoadSettings().muted;
+    if(m.length) xoUnmuteSymbol(m[m.length - 1]);
+  }
 }
 
 async function xoEnableDesktop(){
-  const st = document.getElementById('xoDesktopStatus');
-  if(!('Notification' in window)){ st.textContent = 'This browser does not support desktop notifications — in-app popups still work.'; return; }
+  if(!('Notification' in window)){ xoRenderDesktopStatus(); return; }
   try { await Notification.requestPermission(); } catch(e){}
   xoRenderDesktopStatus();
 }
 function xoRenderDesktopStatus(){
   const st = document.getElementById('xoDesktopStatus');
   const btn = document.getElementById('xoEnableBtn');
-  if(!st || !btn) return;
-  if(!('Notification' in window)){ st.textContent = 'Desktop notifications aren’t supported here — in-app popups still work.'; btn.style.display = 'none'; return; }
+  const sw = document.getElementById('xoDesktop');
+  if(!st || !btn || !sw) return;
+  if(!('Notification' in window)){
+    st.className = 'al-row-hint'; st.textContent = 'Not supported in this browser. In-app popups still work.';
+    btn.style.display = 'none'; sw.disabled = true; return;
+  }
   const p = Notification.permission;
-  btn.style.display = p === 'granted' ? 'none' : '';
-  st.style.color = p === 'granted' ? 'var(--green)' : p === 'denied' ? 'var(--red)' : 'var(--text-3)';
-  st.textContent = p === 'granted' ? '✓ Desktop notifications are on'
-    : p === 'denied' ? '✗ Blocked — allow notifications for this site in your browser settings, then reopen this panel'
-    : 'Desktop notifications are not enabled yet — in-app popups work either way';
+  btn.style.display = p === 'default' ? '' : 'none';
+  sw.disabled = p === 'denied';
+  st.className = 'al-row-hint ' + (p === 'granted' ? 'ok' : p === 'denied' ? 'bad' : 'wait');
+  st.textContent = p === 'granted' ? 'Allowed by your browser'
+    : p === 'denied' ? 'Blocked. Allow notifications for this site in your browser settings, then reopen this panel'
+    : 'Needs your permission first';
 }
 function xoSendTest(){
   xoDeliver([{ symbol:'BTC', tf:'SIX_HOUR', dir:'bull', time:Date.now(), price:(findTokenBySymbol('BTC')||{}).price || 100000, age:0, test:true }], { test:true });
@@ -8068,18 +8315,24 @@ function xoRenderSettings(){
   document.getElementById('xoEnabled').checked = s.enabled;
   document.getElementById('xoDesktop').checked = s.desktop;
   XO_TFS.forEach(tf => { document.getElementById(XO_TF_UI[tf]).checked = !!s.tfs[tf]; });
-  document.getElementById('xoMuted').value = s.muted.join(', ');
+  document.getElementById('xoSound').checked = s.sound;
+  document.getElementById('xoSoundStyle').value = s.soundStyle;
+  document.getElementById('xoSoundVol').value = Math.round(s.soundVol * 100);
+  xoSyncUi();
+  xoRenderMuted();
   xoRenderDesktopStatus();
   const warn = document.getElementById('xoAutoScanWarn');
   if(warn) warn.style.display = document.getElementById('arEnabled')?.checked ? 'none' : 'block';
+
   const box = document.getElementById('xoHistory');
   box.textContent = '';
   const hist = xoLoadHistory().slice(0, 12);
-  if(!hist.length) return;
-  const head = document.createElement('div');
-  head.style.cssText = 'font-family:var(--font-mono);font-size:0.6rem;color:var(--text-3);letter-spacing:1.5px;margin:var(--sp-2) 0 2px';
-  head.textContent = 'RECENT ARROWS';
-  box.appendChild(head);
+  document.getElementById('xoHistoryCount').textContent = String(xoLoadHistory().length);
+  if(!hist.length){
+    const e = document.createElement('div'); e.className = 'al-empty'; e.textContent = 'No arrows yet. They’ll be listed here as they print.';
+    box.appendChild(e);
+    return;
+  }
   hist.forEach(h => {
     const row = document.createElement('div'); row.className = 'xo-hist-row';
     const d = document.createElement('span'); d.style.color = h.dir === 'bull' ? 'var(--green)' : 'var(--red)'; d.textContent = h.dir === 'bull' ? '▲' : '▼';

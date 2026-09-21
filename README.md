@@ -33,6 +33,7 @@ When a Trader XO arrow prints on **4H or 1H** (30M is opt-in), the app shows an 
 - Checked at the end of every scan, so it only works while the app is open and **auto-scan is on**; a 1H arrow is caught within one scan interval of its candle closing.
 - Only *new* arrows are announced. The last announced arrow per token/timeframe is remembered in localStorage, so reloads don't repeat, and the first scan after enabling just records a baseline instead of announcing every existing arrow.
 - An arrow older than two candles (or 1.25× your auto-scan interval, if longer) is treated as stale and recorded silently.
+- **Sound is opt-in** (off by default): a rising tone for a Bull arrow, a falling tone for Bear, a neutral one when a burst is mixed. Pick Chime, Ping or Alarm and a volume, with a preview button. The tones are synthesised in the browser (no audio files), and browsers keep audio locked until you've clicked on the page once — if an arrow lands before that, the sound is skipped and noted in the scan log. Desktop notifications are sent silent so this is the single control for noise.
 - Bursts are collapsed: at most 5 popups plus a "+N more", and one summary desktop notification when more than 3 fire at once.
 - Desktop notifications need a one-time browser permission and a secure context (https or localhost). They don't work when the tab is closed — there is no push backend.
 
