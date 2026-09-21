@@ -32,11 +32,12 @@ Search, Alerts and Journal live in the top bar, so they're one click away. Press
 
 ## Trend-shift notifications
 
-When a Trader XO arrow prints on **4H or 1H** (30M is opt-in), the app shows an in-app popup and, if you've enabled them, a desktop notification. No email involved. Configure under **⋯ → Alerts → Trend shifts**, including a list of tokens to mute (or hit "mute" on any popup).
+When a Trader XO arrow prints on **4H or 1H** (30M is opt-in), the app shows an in-app popup and, if you've enabled them, a desktop notification. No email involved. Configure under **Alerts → Settings → Trend shifts**, including a list of tokens to mute (or hit "mute" on any popup).
 
 - Checked at the end of every scan, so it only works while the app is open and **auto-scan is on**; a 1H arrow is caught within one scan interval of its candle closing.
 - Only *new* arrows are announced. The last announced arrow per token/timeframe is remembered in localStorage, so reloads don't repeat, and the first scan after enabling just records a baseline instead of announcing every existing arrow.
 - An arrow older than two candles (or 1.25× your auto-scan interval, if longer) is treated as stale and recorded silently.
+- **Today's log:** every arrow you were notified about is kept in **Alerts → Today's log** (newest first, with the time its candle closed, the price, a filter by timeframe and a dot on anything new since you last looked). Click a row to open the token. The log **resets every trading day**. Crypto never closes, so the day starts at a time you set in Alerts → Settings (default 00:00 local time, matching the journal's days; UTC is an option). It empties itself at that moment even if the app is left open overnight, and anything older is dropped on the next read even if the app was closed. The bell in the top bar counts arrows logged since you last opened it.
 - **Sound is opt-in** (off by default): a rising tone for a Bull arrow, a falling tone for Bear, a neutral one when a burst is mixed. Pick Chime, Ping or Alarm and a volume, with a preview button. The tones are synthesised in the browser (no audio files), and browsers keep audio locked until you've clicked on the page once — if an arrow lands before that, the sound is skipped and noted in the scan log. Desktop notifications are sent silent so this is the single control for noise.
 - Bursts are collapsed: at most 5 popups plus a "+N more", and one summary desktop notification when more than 3 fire at once.
 - Desktop notifications need a one-time browser permission and a secure context (https or localhost). They don't work when the tab is closed — there is no push backend.

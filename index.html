@@ -2423,17 +2423,46 @@ input.ctrl::placeholder { color: var(--text-3); }
 .al-mutebox input { flex: 1; min-width: 120px; background: none; border: none; outline: none; color: var(--text); font-family: var(--font-mono); font-size: 0.74rem; text-transform: uppercase; padding: 4px 6px; }
 .al-mutebox input::placeholder { color: var(--text-3); text-transform: none; }
 
-/* recent arrows */
-.al-details { margin-top: var(--sp-3); border-top: 1px solid var(--border); padding-top: var(--sp-3); }
-.al-details summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: var(--sp-2); font-family: var(--font-ui); font-size: 0.74rem; font-weight: 600; color: var(--text-2); }
-.al-details summary::-webkit-details-marker { display: none; }
-.al-details summary::before { content: '▸'; font-size: 0.7rem; transition: transform var(--t-fast); }
-.al-details[open] summary::before { transform: rotate(90deg); }
-.al-details summary:hover { color: var(--text); }
 .al-count { font-family: var(--font-mono); font-size: 0.64rem; color: var(--text-2); background: var(--bg3); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; }
-.al-details .al-empty { font-family: var(--font-ui); font-size: 0.7rem; color: var(--text-2); padding: var(--sp-2) 0 0; }
+.al-tab[aria-selected="true"] .al-count { color: var(--blue); border-color: var(--blue); background: var(--blue-dim); }
+
+/* alerts tabs */
+.al-tabs { display: flex; gap: var(--sp-1); padding: 0 var(--sp-4); background: var(--bg3); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.al-tab { background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 10px var(--sp-3); font-family: var(--font-ui); font-size: 0.78rem; font-weight: 600; color: var(--text-2); cursor: pointer; display: flex; align-items: center; gap: 6px; transition: color var(--t-fast), border-color var(--t-fast); }
+.al-tab:hover { color: var(--text); }
+.al-tab[aria-selected="true"] { color: var(--blue); border-bottom-color: var(--blue); }
+.al-tab:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; border-radius: var(--r-sm); }
+.al-body { flex: 1 1 auto; min-height: 0; }
+.al-body[hidden] { display: none; }
+
+/* today's log */
+.al-logbar { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
+.al-eyebrow { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 1.5px; color: var(--text-2); text-transform: uppercase; }
+.al-log-title { font-family: var(--font-ui); font-size: 1rem; font-weight: 700; color: var(--text); margin-top: 2px; }
+.al-fchips { display: flex; gap: 6px; flex-wrap: wrap; }
+.al-fchip { background: transparent; border: 1px solid var(--border); color: var(--text-2); padding: 5px 10px; font-family: var(--font-mono); font-size: 0.7rem; border-radius: var(--r-md); cursor: pointer; transition: all var(--t-fast) var(--ease-out); }
+.al-fchip:hover { border-color: var(--text-2); }
+.al-fchip[aria-pressed="true"] { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
+.al-fchip:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.al-loglist { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; }
+.al-logrow { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto auto; align-items: center; gap: var(--sp-3); padding: 10px var(--sp-4); border-top: 1px solid var(--border); cursor: pointer; transition: background var(--t-fast); }
+.al-logrow:first-child { border-top: none; }
+.al-logrow:hover { background: var(--bg-hover); }
+.al-dir { font-family: var(--font-mono); font-size: 0.64rem; font-weight: 700; letter-spacing: 0.5px; padding: 4px 0; text-align: center; border-radius: var(--r-sm); }
+.al-dir.bull { background: var(--green-dim); color: var(--green); }
+.al-dir.bear { background: var(--red-dim); color: var(--red); }
+.al-logsym { display: flex; align-items: center; gap: 6px; background: none; border: none; padding: 0; font-family: var(--font-ui); font-size: 0.86rem; font-weight: 700; color: var(--text); cursor: pointer; text-align: left; min-width: 0; }
+.al-logsym:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 3px; }
+.al-newdot { width: 6px; height: 6px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 6px rgba(6,229,208,0.6); flex-shrink: 0; }
+.al-logtf { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 2px 6px; }
+.al-logmeta { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; min-width: 64px; }
+.al-logtime { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text); }
+.al-logprice { font-family: var(--font-mono); font-size: 0.66rem; color: var(--text-2); }
+.al-log-empty { padding: var(--sp-8) var(--sp-4); text-align: center; font-family: var(--font-ui); font-size: 0.78rem; color: var(--text-2); line-height: 1.6; }
+.al-inline { display: flex; align-items: center; gap: var(--sp-2); }
 
 @media (max-width: 520px) {
+  .al-logrow { grid-template-columns: 56px minmax(0, 1fr) auto auto; gap: var(--sp-2); padding: 10px var(--sp-3); }
   .al-card { padding: var(--sp-4); }
   .al-row { flex-wrap: wrap; }
 }
@@ -2468,10 +2497,6 @@ input.ctrl::placeholder { color: var(--text-3); }
 .xo-toast-x:hover { color: var(--text); }
 @keyframes xoToastIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .xo-toast { animation: none; } }
-.xo-hist-row { display: flex; gap: var(--sp-2); align-items: center; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-2); padding: 4px 0; }
-.xo-hist-row button { background: none; border: none; padding: 0; cursor: pointer; font: inherit; color: var(--text); font-weight: 700; }
-.xo-hist-row button:hover { color: var(--blue); }
-.xo-hist-row .when { color: var(--text-3); margin-left: auto; }
 
 
 /* Minimized: collapses to a slim header-only pill */
@@ -2554,7 +2579,7 @@ input.ctrl::placeholder { color: var(--text-3); }
           <div class="token-search-dropdown" id="tokenSearchDropdown" style="display:none"></div>
         </div>
       </div>
-      <button class="tb-icon-btn" id="tbAlertsBtn" type="button" onclick="openAlerts()" title="Alerts" aria-label="Alerts" aria-haspopup="dialog">
+      <button class="tb-icon-btn" id="tbAlertsBtn" type="button" onclick="openAlerts('log')" title="Alerts" aria-label="Alerts" aria-haspopup="dialog">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
         <span class="tb-badge" id="tbAlertsBadge" hidden aria-hidden="true">0</span>
       </button>
@@ -7928,7 +7953,32 @@ document.addEventListener('keydown', function(e){
       <div class="journal-title" id="alTitle">🔔 ALERTS</div>
       <button class="journal-close" onclick="closeAlerts()" aria-label="Close alerts">✕</button>
     </div>
-    <div class="al-body">
+    <div class="al-tabs" role="tablist" aria-label="Alerts sections" onkeydown="xoTabKeydown(event)">
+      <button class="al-tab" role="tab" id="alTabLog" type="button" aria-selected="true" aria-controls="alPanelLog" onclick="xoSwitchAlertsTab('log')">Today’s log <span class="al-count" id="xoLogCount">0</span></button>
+      <button class="al-tab" role="tab" id="alTabSettings" type="button" aria-selected="false" aria-controls="alPanelSettings" tabindex="-1" onclick="xoSwitchAlertsTab('settings')">Settings</button>
+    </div>
+
+    <!-- TODAY'S LOG — every trend arrow you were notified about since the trading day started -->
+    <div class="al-body" id="alPanelLog" role="tabpanel" aria-labelledby="alTabLog">
+      <div class="al-logbar">
+        <div>
+          <div class="al-eyebrow">Trading day</div>
+          <div class="al-log-title" id="xoLogTitle">—</div>
+          <div class="al-row-hint" id="xoLogSummary" style="margin-top:2px"></div>
+        </div>
+        <div class="al-fchips" id="xoLogFilters" role="group" aria-label="Filter by timeframe">
+          <button class="al-fchip" type="button" data-f="all" aria-pressed="true" onclick="xoSetLogFilter('all')">All</button>
+          <button class="al-fchip" type="button" data-f="SIX_HOUR" aria-pressed="false" onclick="xoSetLogFilter('SIX_HOUR')">4H</button>
+          <button class="al-fchip" type="button" data-f="ONE_HOUR" aria-pressed="false" onclick="xoSetLogFilter('ONE_HOUR')">1H</button>
+          <button class="al-fchip" type="button" data-f="THIRTY_MINUTE" aria-pressed="false" onclick="xoSetLogFilter('THIRTY_MINUTE')">30M</button>
+        </div>
+      </div>
+      <div class="al-banner warn" id="xoLogBanner" style="display:none;margin-top:0"></div>
+      <div class="al-loglist" id="xoLogList" role="list" aria-label="Trend arrows today"></div>
+      <p class="al-foot" id="xoLogFoot" style="margin-top:0"></p>
+    </div>
+
+    <div class="al-body" id="alPanelSettings" role="tabpanel" aria-labelledby="alTabSettings" hidden>
 
       <!-- TREND SHIFTS · Trader XO — in-app + desktop + sound, no email -->
       <section class="al-card" aria-labelledby="alTrendTitle">
@@ -7996,6 +8046,20 @@ document.addEventListener('keydown', function(e){
             </div>
           </div>
 
+          <div class="al-row">
+            <div class="al-row-text">
+              <div class="al-row-label">Log resets daily at</div>
+              <div class="al-row-hint">Crypto never closes, so pick where your trading day starts</div>
+            </div>
+            <div class="al-controls">
+              <input class="al-input" type="time" id="xoDayTime" style="width:auto" onchange="xoSaveSettingsFromUI()" aria-label="Time the log resets">
+              <select class="al-select" id="xoDayTz" onchange="xoSaveSettingsFromUI()" aria-label="Time zone for the reset">
+                <option value="local">Local time</option>
+                <option value="utc">UTC</option>
+              </select>
+            </div>
+          </div>
+
           <div class="al-field">
             <div class="al-row-label" id="xoMutedLabel">Muted tokens</div>
             <div class="al-mutebox" id="xoMutedBox" onclick="document.getElementById('xoMutedInput').focus()">
@@ -8011,10 +8075,6 @@ document.addEventListener('keydown', function(e){
           </div>
         </div>
 
-        <details class="al-details" id="xoHistoryWrap">
-          <summary>Recent arrows <span class="al-count" id="xoHistoryCount">0</span></summary>
-          <div id="xoHistory"></div>
-        </details>
         <p class="al-foot">Checked at the end of every scan, so this only works while the app is open and auto-scan is on. Desktop notifications are silent on purpose; the sound option above is what makes noise.</p>
       </section>
 
@@ -8085,7 +8145,7 @@ function alertSaveEmail(){
   localStorage.setItem(ALERT_KEY, JSON.stringify(s));
 }
 
-function openAlerts(){
+function openAlerts(tab){
   const s = alertLoadSettings();
   if(s.email)  document.getElementById('alertEmail').value = s.email;
   if(s.threshold){ document.getElementById('alertThreshold').value = s.threshold; document.getElementById('alertThresholdVal').textContent = s.threshold+'%'; }
@@ -8094,8 +8154,9 @@ function openAlerts(){
   document.getElementById('alertOnSqueeze').checked = !!s.onSqueeze;
   document.getElementById('alertOnConfluence').checked = !!s.onConfluence;
   if(s.lastSent) document.getElementById('alertLastSent').textContent = 'Last sent: '+new Date(s.lastSent).toLocaleString();
-  xoRenderSettings();
+  xoLogNewSince = xoSeenAt();      // read before marking seen, so this view can highlight what's new
   xoMarkAlertsSeen();
+  xoSwitchAlertsTab(tab === 'settings' ? 'settings' : 'log');
   document.getElementById('alertsOverlay').classList.add('open');
   openModalA11y('alertsOverlay');
 }
@@ -8130,6 +8191,8 @@ function xoLoadSettings(){
     desktop: s.desktop !== false,
     tfs: { SIX_HOUR: t.SIX_HOUR !== false, ONE_HOUR: t.ONE_HOUR !== false, THIRTY_MINUTE: !!t.THIRTY_MINUTE },
     muted: xoParseSymbols(s.muted),
+    dayReset: /^([01]\d|2[0-3]):[0-5]\d$/.test(s.dayReset || '') ? s.dayReset : '00:00',   // where the trading day starts
+    dayTz: s.dayTz === 'utc' ? 'utc' : 'local',
     sound: !!s.sound,                                                     // off until you opt in
     soundStyle: XO_SOUND_STYLES.includes(s.soundStyle) ? s.soundStyle : 'chime',
     soundVol: typeof s.soundVol === 'number' && s.soundVol >= 0 && s.soundVol <= 1 ? s.soundVol : 0.6
@@ -8153,6 +8216,8 @@ function xoSaveSettingsFromUI(){
     desktop: document.getElementById('xoDesktop').checked,
     tfs: {},
     muted: xoLoadSettings().muted,            // edited through the tag box, not read back from the DOM
+    dayReset: document.getElementById('xoDayTime').value || '00:00',
+    dayTz: document.getElementById('xoDayTz').value === 'utc' ? 'utc' : 'local',
     sound: document.getElementById('xoSound').checked,
     soundStyle: document.getElementById('xoSoundStyle').value,
     soundVol: Math.max(0, Math.min(100, +document.getElementById('xoSoundVol').value || 0)) / 100
@@ -8160,6 +8225,8 @@ function xoSaveSettingsFromUI(){
   XO_TFS.forEach(tf => { s.tfs[tf] = document.getElementById(XO_TF_UI[tf]).checked; });
   xoStoreSettings(s);
   xoSyncUi();
+  xoScheduleDayReset();      // the reset moment may have moved
+  xoUpdateBell();
 }
 // Dependent controls: dim everything when the master switch is off, show sound options only when sound is on.
 function xoSyncUi(){
@@ -8180,24 +8247,76 @@ function xoSaveSeen(d){
   Object.keys(d.seen).forEach(k => { if(d.seen[k] < cutoff) delete d.seen[k]; });
   try { localStorage.setItem(XO_SEEN_KEY, JSON.stringify(d)); } catch(e){}
 }
+// ── Trading-day log ──
+// Every notification that was delivered is kept in a log for the current trading day. Crypto never
+// closes, so "the day" starts at a time you choose (default local midnight, the same as the journal's
+// days) in local time or UTC. Anything logged before the most recent start is dropped — filtered on
+// every read, so it stays correct even if the app was closed or the laptop asleep at the boundary.
+const XO_HISTORY_MAX = 500;
+function xoParseHM(v){
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || ''));
+  if(!m) return null;
+  const h = +m[1], mi = +m[2];
+  return h < 24 && mi < 60 ? [h, mi] : null;
+}
+function xoDayStartMs(nowMs, s){
+  s = s || xoLoadSettings();
+  const [h, m] = xoParseHM(s.dayReset) || [0, 0];
+  const d = new Date(nowMs);
+  if(s.dayTz === 'utc'){ d.setUTCHours(h, m, 0, 0); if(d.getTime() > nowMs) d.setUTCDate(d.getUTCDate() - 1); }
+  else { d.setHours(h, m, 0, 0); if(d.getTime() > nowMs) d.setDate(d.getDate() - 1); }
+  return d.getTime();
+}
+function xoNextDayStartMs(nowMs, s){
+  s = s || xoLoadSettings();
+  const d = new Date(xoDayStartMs(nowMs, s));
+  if(s.dayTz === 'utc') d.setUTCDate(d.getUTCDate() + 1); else d.setDate(d.getDate() + 1);
+  return d.getTime();
+}
 function xoLoadHistory(){
-  try { const h = JSON.parse(localStorage.getItem(XO_HISTORY_KEY) || '[]'); return Array.isArray(h) ? h : []; } catch(e){ return []; }
+  let h = [];
+  try { h = JSON.parse(localStorage.getItem(XO_HISTORY_KEY) || '[]'); } catch(e){}
+  if(!Array.isArray(h)) return [];
+  const start = xoDayStartMs(Date.now());
+  return h.filter(e => e && typeof e.at === 'number' && e.at >= start);
+}
+function xoPruneHistory(){
+  try { localStorage.setItem(XO_HISTORY_KEY, JSON.stringify(xoLoadHistory())); } catch(e){}
 }
 function xoPushHistory(items){
-  const h = items.map(i => ({ symbol:i.symbol, tf:i.tf, dir:i.dir, time:i.time, price:i.price, at:Date.now() })).concat(xoLoadHistory()).slice(0, 60);
+  const now = Date.now();
+  const h = items.map(i => ({ symbol:i.symbol, tf:i.tf, dir:i.dir, time:i.time, price:i.price, at:now })).concat(xoLoadHistory()).slice(0, XO_HISTORY_MAX);
   try { localStorage.setItem(XO_HISTORY_KEY, JSON.stringify(h)); } catch(e){}
-  xoUpdateBell();
+  if(xoLogIsOpen()){ xoRenderLog(); xoMarkAlertsSeen(); }   // looking at it right now: show it, don't badge it
+  else xoUpdateBell();
 }
+// the log empties itself at the boundary even if you leave the app open all night
+let xoResetTimer = null;
+function xoScheduleDayReset(){
+  clearTimeout(xoResetTimer);
+  const now = Date.now();
+  const wait = Math.min(Math.max(1000, xoNextDayStartMs(now) - now + 500), 2147000000);
+  xoResetTimer = setTimeout(() => { xoPruneHistory(); xoUpdateBell(); if(xoLogIsOpen()) xoRenderLog(); xoScheduleDayReset(); }, wait);
+}
+document.addEventListener('visibilitychange', () => {       // timers stall while a laptop sleeps — re-check on return
+  if(document.hidden) return;
+  xoPruneHistory(); xoUpdateBell(); if(xoLogIsOpen()) xoRenderLog(); xoScheduleDayReset();
+});
 
 // Bell in the top bar: a count of trend arrows that printed since the Alerts panel was last opened.
 const XO_ALERTS_SEEN_KEY = '3drive_xo_alerts_seen_at';
+function xoSeenAt(){
+  try { return +localStorage.getItem(XO_ALERTS_SEEN_KEY) || 0; } catch(e){ return 0; }
+}
 function xoUpdateBell(){
   const badge = document.getElementById('tbAlertsBadge');
   const btn = document.getElementById('tbAlertsBtn');
   if(!badge || !btn) return;
-  let seenAt = 0;
-  try { seenAt = +localStorage.getItem(XO_ALERTS_SEEN_KEY) || 0; } catch(e){}
-  const n = xoLoadHistory().filter(h => h.at > seenAt).length;
+  const today = xoLoadHistory();
+  const cnt = document.getElementById('xoLogCount');
+  if(cnt) cnt.textContent = String(today.length);
+  const seenAt = xoSeenAt();
+  const n = today.filter(h => h.at > seenAt).length;
   badge.hidden = n === 0;
   badge.textContent = n > 9 ? '9+' : String(n);
   const label = n ? `Alerts, ${n} new trend arrow${n > 1 ? 's' : ''}` : 'Alerts';
@@ -8374,14 +8493,14 @@ function xoShowSummaryToast(n){
   el.className = 'xo-toast';
   const main = document.createElement('div'); main.className = 'xo-toast-main';
   const title = document.createElement('div'); title.className = 'xo-toast-title'; title.textContent = `+${n} more trend shift${n>1?'s':''}`;
-  const sub = document.createElement('div'); sub.className = 'xo-toast-sub'; sub.textContent = 'Open Alerts to see the full list';
+  const sub = document.createElement('div'); sub.className = 'xo-toast-sub'; sub.textContent = 'Open the log to see them all';
   main.append(title, sub);
   const x = document.createElement('button'); x.className = 'xo-toast-x'; x.type = 'button'; x.setAttribute('aria-label', 'Dismiss'); x.textContent = '✕';
   el.append(main, x);
   const kill = () => { clearTimeout(timer); el.remove(); };
   const timer = setTimeout(kill, XO_TOAST_MS);
   x.addEventListener('click', e => { e.stopPropagation(); kill(); });
-  el.addEventListener('click', () => { openAlerts(); kill(); });
+  el.addEventListener('click', () => { openAlerts('log'); kill(); });
   box.appendChild(el);
 }
 
@@ -8452,7 +8571,100 @@ function xoRenderDesktopStatus(){
     : p === 'denied' ? 'Blocked. Allow notifications for this site in your browser settings, then reopen this panel'
     : 'Needs your permission first';
 }
+xoPruneHistory();
 xoUpdateBell();
+xoScheduleDayReset();
+
+// ── Alerts panel: tabs + the log view ──
+let xoLogFilter = 'all';
+let xoLogNewSince = 0;
+function xoLogIsOpen(){
+  const ov = document.getElementById('alertsOverlay'), pn = document.getElementById('alPanelLog');
+  return !!(ov && pn && ov.classList.contains('open') && !pn.hidden);
+}
+function xoSwitchAlertsTab(tab, focus){
+  const log = tab !== 'settings';
+  // fill the panel in while it is still hidden, so the switches and chips appear in their final state
+  // instead of animating from "off" every time the tab opens
+  if(log) xoRenderLog(); else xoRenderSettings();
+  document.getElementById('alPanelLog').hidden = !log;
+  document.getElementById('alPanelSettings').hidden = log;
+  const tl = document.getElementById('alTabLog'), ts = document.getElementById('alTabSettings');
+  tl.setAttribute('aria-selected', String(log)); ts.setAttribute('aria-selected', String(!log));
+  tl.tabIndex = log ? 0 : -1; ts.tabIndex = log ? -1 : 0;
+  if(focus) (log ? tl : ts).focus();
+}
+function xoTabKeydown(e){
+  if(e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
+  e.preventDefault();
+  const onLog = document.getElementById('alTabLog').getAttribute('aria-selected') === 'true';
+  const goLog = e.key === 'Home' ? true : e.key === 'End' ? false : !onLog;
+  xoSwitchAlertsTab(goLog ? 'log' : 'settings', true);
+}
+function xoSetLogFilter(f){
+  xoLogFilter = f;
+  xoRenderLog();
+}
+function xoClock(ms, tz){
+  return new Intl.DateTimeFormat([], { hour:'2-digit', minute:'2-digit', hourCycle:'h23', timeZone: tz }).format(ms);
+}
+function xoRenderLog(){
+  const list = document.getElementById('xoLogList');
+  if(!list) return;
+  const s = xoLoadSettings();
+  const tz = s.dayTz === 'utc' ? 'UTC' : undefined;
+  const start = xoDayStartMs(Date.now(), s);
+  const all = xoLoadHistory()
+    .map(h => ({ ...h, close: h.time != null ? h.time + (XO_TF_MS[h.tf] || 0) : h.at }))   // when the arrow's candle closed
+    .sort((a, b) => b.close - a.close || b.at - a.at);
+  const bull = all.filter(h => h.dir === 'bull').length, bear = all.length - bull;
+
+  document.getElementById('xoLogTitle').textContent = new Intl.DateTimeFormat([], { weekday:'short', day:'numeric', month:'short', timeZone: tz }).format(start);
+  document.getElementById('xoLogSummary').textContent = all.length
+    ? `${all.length} arrow${all.length > 1 ? 's' : ''} · ${bull} ▲ Bull · ${bear} ▼ Bear`
+    : 'No arrows yet';
+  document.getElementById('xoLogCount').textContent = String(all.length);
+  document.querySelectorAll('#xoLogFilters .al-fchip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.f === xoLogFilter)));
+
+  const notes = [];
+  if(!s.enabled) notes.push('Trend notifications are off, so new arrows are not being logged.');
+  if(!document.getElementById('arEnabled')?.checked) notes.push('Auto-scan is off, so arrows are only checked when you press Scan Now.');
+  const banner = document.getElementById('xoLogBanner');
+  banner.style.display = notes.length ? 'block' : 'none';
+  banner.textContent = notes.join(' ');
+
+  const rows = xoLogFilter === 'all' ? all : all.filter(h => h.tf === xoLogFilter);
+  list.textContent = '';
+  if(!rows.length){
+    const e = document.createElement('div'); e.className = 'al-log-empty';
+    e.textContent = all.length
+      ? `No ${TF_LABELS[xoLogFilter]} arrows today.`
+      : 'No trend arrows yet today. Arrows on the timeframes you have switched on are listed here as they print.';
+    list.appendChild(e);
+  }
+  rows.forEach(h => {
+    const row = document.createElement('div'); row.className = 'al-logrow'; row.setAttribute('role', 'listitem');
+    row.title = `Candle closed ${xoClock(h.close, tz)} · notified ${xoClock(h.at, tz)}`;
+    const dir = document.createElement('span'); dir.className = 'al-dir ' + (h.dir === 'bull' ? 'bull' : 'bear'); dir.textContent = h.dir === 'bull' ? '▲ BULL' : '▼ BEAR';
+    const sym = document.createElement('button'); sym.type = 'button'; sym.className = 'al-logsym';
+    if(h.at > xoLogNewSince){ const dot = document.createElement('span'); dot.className = 'al-newdot'; dot.title = 'New since you last looked'; sym.appendChild(dot); }
+    sym.append(h.symbol);
+    const tf = document.createElement('span'); tf.className = 'al-logtf'; tf.textContent = TF_LABELS[h.tf] || h.tf;
+    const meta = document.createElement('span'); meta.className = 'al-logmeta';
+    const t = document.createElement('span'); t.className = 'al-logtime'; t.textContent = xoClock(h.close, tz);
+    const pr = document.createElement('span'); pr.className = 'al-logprice'; pr.textContent = h.price != null ? fmtPrice(h.price) : '';
+    meta.append(t, pr);
+    row.append(dir, sym, tf, meta);
+    row.addEventListener('click', () => { closeAlerts(); openTokenDetail(h.symbol); });
+    list.appendChild(row);
+  });
+
+  const [hh, mm] = xoParseHM(s.dayReset) || [0, 0];
+  document.getElementById('xoLogFoot').textContent =
+    `Times are when each arrow’s candle closed (${s.dayTz === 'utc' ? 'UTC' : 'your local time'}). The log resets daily at ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} ${s.dayTz === 'utc' ? 'UTC' : 'local'}. `
+    + 'Only arrows you were notified about are listed, so muted tokens and switched-off timeframes are left out.';
+}
+
 function xoSendTest(){
   xoDeliver([{ symbol:'BTC', tf:'SIX_HOUR', dir:'bull', time:Date.now(), price:(findTokenBySymbol('BTC')||{}).price || 100000, age:0, test:true }], { test:true });
 }
@@ -8464,31 +8676,13 @@ function xoRenderSettings(){
   document.getElementById('xoSound').checked = s.sound;
   document.getElementById('xoSoundStyle').value = s.soundStyle;
   document.getElementById('xoSoundVol').value = Math.round(s.soundVol * 100);
+  document.getElementById('xoDayTime').value = s.dayReset;
+  document.getElementById('xoDayTz').value = s.dayTz;
   xoSyncUi();
   xoRenderMuted();
   xoRenderDesktopStatus();
   const warn = document.getElementById('xoAutoScanWarn');
   if(warn) warn.style.display = document.getElementById('arEnabled')?.checked ? 'none' : 'block';
-
-  const box = document.getElementById('xoHistory');
-  box.textContent = '';
-  const hist = xoLoadHistory().slice(0, 12);
-  document.getElementById('xoHistoryCount').textContent = String(xoLoadHistory().length);
-  if(!hist.length){
-    const e = document.createElement('div'); e.className = 'al-empty'; e.textContent = 'No arrows yet. They’ll be listed here as they print.';
-    box.appendChild(e);
-    return;
-  }
-  hist.forEach(h => {
-    const row = document.createElement('div'); row.className = 'xo-hist-row';
-    const d = document.createElement('span'); d.style.color = h.dir === 'bull' ? 'var(--green)' : 'var(--red)'; d.textContent = h.dir === 'bull' ? '▲' : '▼';
-    const b = document.createElement('button'); b.type = 'button'; b.textContent = h.symbol;
-    b.addEventListener('click', () => { closeAlerts(); openTokenDetail(h.symbol); });
-    const tf = document.createElement('span'); tf.textContent = TF_LABELS[h.tf] || h.tf;
-    const w = document.createElement('span'); w.className = 'when'; w.textContent = xoFmtAgo(Date.now() - h.at);
-    row.append(d, b, tf, w);
-    box.appendChild(row);
-  });
 }
 
 async function alertSendTest(){
