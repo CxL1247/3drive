@@ -2444,7 +2444,7 @@ input.ctrl::placeholder { color: var(--text-3); }
 .al-fchip:hover { border-color: var(--text-2); }
 .al-fchip[aria-pressed="true"] { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
 .al-fchip:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-.al-loglist { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; }
+.al-loglist { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-lg); overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-height: 140px; }
 .al-logrow { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto auto; align-items: center; gap: var(--sp-3); padding: 10px var(--sp-4); border-top: 1px solid var(--border); cursor: pointer; transition: background var(--t-fast); }
 .al-logrow:first-child { border-top: none; }
 .al-logrow:hover { background: var(--bg-hover); }
