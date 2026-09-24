@@ -738,72 +738,7 @@ input.ctrl::placeholder { color: var(--text-3); }
   gap: var(--sp-4);
 }
 
-.conf-card {
-  position: relative;
-  background: linear-gradient(160deg, var(--bg2) 0%, var(--bg3) 100%);
-  border: 1px solid var(--border);
-  border-radius: var(--r-xl);
-  padding: var(--sp-4);
-  cursor: pointer;
-  overflow: hidden;
-  transition: transform var(--t-fast) var(--ease-out), box-shadow var(--t-fast);
-  animation: fw-in 0.4s var(--ease-spring);
-}
-.conf-card:hover { transform: translateY(-2px); }
-.conf-card.conf-bullish { box-shadow: var(--shadow-lg), var(--glow-green); }
-.conf-card.conf-bearish { box-shadow: var(--shadow-lg), var(--glow-red); }
-.conf-card::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-}
-.conf-card.conf-bullish::before { background: linear-gradient(90deg, var(--green), transparent); }
-.conf-card.conf-bearish::before { background: linear-gradient(90deg, var(--red), transparent); }
-
-.conf-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: var(--sp-3); }
-.conf-card-sym { font-family: var(--font-mono); font-weight: 700; font-size: 1rem; color: var(--text); }
 .conf-card-price { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-3); margin-top: 2px; }
-.conf-dir-badge {
-  font-family: var(--font-ui); font-size: 0.6rem; font-weight: 700; letter-spacing: 0.5px;
-  padding: 3px 8px; border-radius: var(--r-sm);
-}
-.conf-card.conf-bullish .conf-dir-badge { color: var(--green); background: var(--green-dim); }
-.conf-card.conf-bearish .conf-dir-badge { color: var(--red); background: var(--red-dim); }
-
-.conf-score-row { display: flex; align-items: baseline; gap: var(--sp-2); margin-bottom: var(--sp-3); }
-.conf-score { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 800; }
-.conf-card.conf-bullish .conf-score { color: var(--green); }
-.conf-card.conf-bearish .conf-score { color: var(--red); }
-.conf-score-max { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-3); }
-.conf-grade { font-family: var(--font-ui); font-size: 0.62rem; font-weight: 800; padding: 2px 7px; border-radius: var(--r-sm); margin-left: auto; }
-
-.conf-bar-track { height: 5px; border-radius: 3px; background: var(--bg3); overflow: hidden; margin-bottom: var(--sp-4); }
-.conf-bar-fill { height: 100%; border-radius: 3px; transition: width var(--t-normal) var(--ease-out); }
-.conf-card.conf-bullish .conf-bar-fill { background: linear-gradient(90deg, var(--green), #4ade80); }
-.conf-card.conf-bearish .conf-bar-fill { background: linear-gradient(90deg, var(--red), #f87171); }
-
-.conf-pillars { display: flex; flex-direction: column; gap: 7px; }
-.conf-pillar { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--r-md); background: var(--bg3); opacity: 0.35; }
-.conf-pillar.conf-pillar-active { opacity: 1; background: rgba(255,255,255,0.03); }
-.conf-pillar-icon {
-  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 0.7rem; background: var(--bg2); color: var(--text-3);
-}
-.conf-pillar.conf-pillar-active .conf-pillar-icon { color: var(--bg1); }
-.conf-card.conf-bullish .conf-pillar.conf-pillar-active .conf-pillar-icon { background: var(--green); box-shadow: 0 0 8px rgba(0,229,160,0.5); }
-.conf-card.conf-bearish .conf-pillar.conf-pillar-active .conf-pillar-icon { background: var(--red); box-shadow: 0 0 8px rgba(255,61,104,0.5); }
-.conf-pillar-label { font-family: var(--font-ui); font-size: 0.62rem; font-weight: 600; color: var(--text-2); }
-.conf-pillar-detail { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-3); margin-left: auto; }
-
-.conf-bonus-row {
-  margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px dashed var(--border2);
-  display: flex; align-items: center; gap: 6px;
-  font-family: var(--font-ui); font-size: 0.62rem; color: var(--amber);
-}
-.conf-bonus-row + .conf-bonus-row { border-top: none; margin-top: 0; padding-top: 4px; }
-.conf-trend-warn { color: var(--amber); }
-.conf-trend-ok   { color: var(--green); }
-
-/* Three Drives cards — simpler, same visual family */
 .conf-3d-card {
   background: linear-gradient(160deg, var(--bg2) 0%, var(--bg3) 100%);
   border: 1px solid var(--border); border-radius: var(--r-xl);
@@ -819,6 +754,24 @@ input.ctrl::placeholder { color: var(--text-3); }
 .conf-3d-card.conf-bearish .conf-3d-conf { color: var(--red); }
 .conf-3d-meta { display: flex; gap: 6px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-3); }
 .conf-3d-tag { padding: 2px 6px; border-radius: 3px; background: var(--bg3); }
+
+/* ── Weekly Summary (Confluence tab) ── */
+.ws-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); margin-bottom: var(--sp-4); }
+.ws-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.ws-stat { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--sp-3); }
+.ws-stat-label { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 1px; color: var(--text-3); text-transform: uppercase; }
+.ws-stat-val { font-family: var(--font-mono); font-size: 1.15rem; font-weight: 800; color: var(--text); margin-top: 3px; }
+.ws-stat-val.green { color: var(--green); } .ws-stat-val.red { color: var(--red); } .ws-stat-val.amber { color: var(--amber); } .ws-stat-val.blue { color: var(--blue); }
+.ws-stat-sub { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-3); margin-top: 2px; }
+.ws-chart-card { position: relative; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--sp-3) var(--sp-3) var(--sp-2); height: 190px; }
+.ws-chart-card-lg { height: 300px; }
+.ws-canvas { width: 100%; height: 100%; display: block; }
+.ws-chart-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--font-ui); font-size: 0.78rem; color: var(--text-2); text-align: center; padding: var(--sp-4); }
+.ws-chart-note { font-family: var(--font-ui); font-size: 0.68rem; color: var(--text-2); margin-top: var(--sp-3); line-height: 1.5; }
+@media (max-width: 620px) {
+  .ws-head { flex-wrap: wrap; }
+  .ws-stats { grid-template-columns: repeat(3, 1fr); }
+}
 
 @media (max-width: 640px) {
   .conf-grid { grid-template-columns: 1fr; }
@@ -2953,10 +2906,8 @@ input.ctrl::placeholder { color: var(--text-3); }
 <div class="main" id="confluenceView" style="display:none;animation:fade-in 0.4s var(--ease-out)">
 
   <div class="controls-row">
-    <span class="ctrl-label">confluence:</span>
-    <span class="ob-band-note">2 of 3 (RSI · Order Book · Trend) required; S/R, volume and funding adjust the score</span>
-    <button class="filter-btn" id="confTrendOnlyBtn" type="button" aria-pressed="true" onclick="setConfTrendOnly(this.getAttribute('aria-pressed') !== 'true')" title="Hide signals that fight the 4H Trader XO trend">with 4H trend only</button>
-    <span class="gl-updated" id="confHiddenNote" aria-live="polite"></span>
+    <span class="ctrl-label">3-drive:</span>
+    <span class="ob-band-note">Classic harmonic pattern signals, plus a summary of your logged trades below</span>
     <button class="btn primary" id="confScanBtn" onclick="startScan()">▶ SCAN NOW</button>
     <span class="gl-updated" id="confUpdated" aria-live="polite"></span>
   </div>
@@ -2974,14 +2925,50 @@ input.ctrl::placeholder { color: var(--text-3); }
     </div>
   </div>
 
-  <div class="conf-section">
-    <div class="conf-section-title"><span class="conf-section-icon">⬢</span> Confluence Signals</div>
-    <div class="conf-section-sub">Built from RSI + Order Book + Trend (Trader XO on 4H and 1H) — fires independently of whether a chart pattern exists. At least 2 of the 3 core pillars must be concrete in the same direction; Support/Resistance, volume and funding adjust the score but are never one of the two. Range no longer counts. Each card carries a starting plan (entry, stop, target) and a button that opens it in the journal.</div>
-    <div class="conf-grid" id="confSignalGrid">
-      <div class="gl-empty">Press <strong>SCAN NOW</strong> — confluence signals need RSI, Order Book and Trader XO data from the same scan cycle.</div>
+  <div class="conf-section" id="wsSection">
+    <div class="ws-head">
+      <div>
+        <div class="conf-section-title"><span class="conf-section-icon">▤</span> Weekly Summary</div>
+        <div class="conf-section-sub" id="wsRange">Your logged trades, from the journal.</div>
+      </div>
+      <button class="filter-btn" type="button" onclick="openSummaryModal()" title="Open a bigger view, with a monthly option">⤢ expand</button>
+    </div>
+    <div class="ws-stats" id="wsStats"></div>
+    <div class="ws-chart-card">
+      <canvas id="wsChartCanvas" class="ws-canvas"></canvas>
+      <div class="ws-chart-empty" id="wsChartEmpty" style="display:none">No closed trades logged this week yet.</div>
     </div>
   </div>
 
+</div>
+
+<!-- WEEKLY / MONTHLY SUMMARY MODAL -->
+<div class="journal-overlay" id="summaryOverlay" onclick="if(event.target===this)closeSummaryModal()">
+  <div class="journal-panel" style="max-width:760px" role="dialog" aria-modal="true" aria-labelledby="summaryTitle">
+    <div class="journal-header">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="journal-title" id="summaryTitle">▤ TRADE SUMMARY</div>
+        <div class="al-tabs" role="tablist" aria-label="Summary range" style="padding:0;background:none;border-bottom:none">
+          <button class="al-tab" role="tab" id="wsModeWeekBtn" type="button" aria-selected="true" onclick="setSummaryMode('week')" style="padding:4px 10px">Week</button>
+          <button class="al-tab" role="tab" id="wsModeMonthBtn" type="button" aria-selected="false" onclick="setSummaryMode('month')" style="padding:4px 10px">Month</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="j-nav-btn" onclick="summaryNav(-1)" aria-label="Previous">‹</button>
+        <div class="journal-week-label" id="wsModalRange" style="min-width:190px"></div>
+        <button class="j-nav-btn" onclick="summaryNav(1)" aria-label="Next">›</button>
+        <button class="journal-close" onclick="closeSummaryModal()" aria-label="Close">✕</button>
+      </div>
+    </div>
+    <div class="journal-body">
+      <div class="ws-stats" id="wsModalStats"></div>
+      <div class="ws-chart-card ws-chart-card-lg">
+        <canvas id="wsModalCanvas" class="ws-canvas"></canvas>
+        <div class="ws-chart-empty" id="wsModalChartEmpty" style="display:none">No closed trades logged in this range yet.</div>
+      </div>
+      <div class="ws-chart-note" id="wsModalNote"></div>
+    </div>
+  </div>
 </div>
 
 <!-- FOOTER -->
@@ -3205,11 +3192,6 @@ const CONF_RSI_EXTREME  = 30;   // matches the 30/70 hot/cold zone used everywhe
 const CONF_RSI_TREND_RELAXED = 45; // relaxed bar for WITH-trend pullback checks — pullbacks in a real trend rarely reach a textbook extreme
 const CONF_OB_IMBALANCE = 0.50; // 50%+ imbalance = real, not marginal, pressure
 const CONF_SR_TOLERANCE = 0.015;// within 1.5% of a support/resistance zone counts as "at" it
-const CONF_TREND_FRESH_1H = 3;   // a 1H Trader XO arrow within this many closed candles counts as "fresh" (timing bonus)
-const CONF_TREND_FRESH_4H = 1;   // ...and a 4H arrow within this many
-const CONF_VOL_SURGE = 1.5;      // last closed 1H candle's volume vs the average of the 20 before it
-const CONF_FUNDING_CROWDED = 0.05; // % per 8h: at or beyond this the trade is on the crowded side of the market
-const CONF_MIN_STOP_PCT = 0.6;   // the suggested stop is never closer than this to entry — tighter than that is just noise
 
 const STABLES = new Set([
   'USDT','USDC','BUSD','DAI','TUSD','USDP','FDUSD','USDD','FRAX','LUSD','SUSD',
@@ -5670,6 +5652,7 @@ function switchView(view){
     else if(!scanning && !obScanning) startScan();
   }
   if(view==='confluence'){
+    renderWeeklySummary();               // reads the journal, not a scan — always available
     if(tokenData.length) renderConfluence();
     else if(!scanning) startScan();
   }
@@ -6083,7 +6066,6 @@ async function scanOrderbooks(tokens){
   if(currentView === 'orderbook') renderOrderbook();
   if(tdpSymbol) renderTokenDetailBody(tdpSymbol); // popup showing this token — refresh Order Book section
   if(currentView === 'confluence') renderConfluence();
-  confluenceAlertsCheck(); // Order Book is the last piece Confluence needs — check for alerts now
 
   confirmWalls(); // fire-and-forget — upgrades top candidates in place once the recheck lands
 }
@@ -6195,309 +6177,6 @@ function renderOrderbook(){
 // against a genuine trend (RSI staying pinned during a real uptrend isn't "about to
 // reverse," it's what a healthy trend looks like). Rather than a separate mechanism,
 // this reuses the exact same trend read the rest of the app already trusts.
-function getTokenTrend(token){
-  // Trader XO's 4H state is the trend read for confluence — the same one the Trend pillar and the
-  // chart use, so a card can't say "aligned with the 4H uptrend" while the pillar says otherwise.
-  const xo4 = token.xo && token.xo.SIX_HOUR;
-  if(xo4) return xo4.state === 'bull' ? 'up' : 'down';
-  const closes = token.ohlc && token.ohlc.SIX_HOUR && token.ohlc.SIX_HOUR.closes;
-  if(!closes) return 'neutral';
-  try { return get4HTrend(closes); } catch(e){ return 'neutral'; }
-}
-
-function confluenceRSI(token, dir, trend){
-  const rsiEntry = rsiRaw.find(r => r.symbol === token.symbol);
-  const r1h = rsiEntry ? rsiEntry.rsi1h : (token.rsi && token.rsi.ONE_HOUR);
-  const r4h = rsiEntry ? rsiEntry.rsi4h : (token.rsi && token.rsi.SIX_HOUR);
-  if(r1h == null && r4h == null) return null;
-
-  // A pullback in a real uptrend rarely reaches a textbook oversold extreme — requiring
-  // RSI<=30 there means the bullish pillar almost never fires exactly when it should.
-  // The relaxed bar only applies WITH the trend; AGAINST the trend keeps the strict bar,
-  // since a counter-trend reversal call needs more evidence, not less.
-  const withTrend = (dir === 'bullish' && trend === 'up') || (dir === 'bearish' && trend === 'down');
-  const bar = withTrend ? CONF_RSI_TREND_RELAXED : CONF_RSI_EXTREME;
-
-  const isExtreme = v => dir === 'bullish' ? v <= bar : v >= (100 - bar);
-  const oneOk = r1h != null && isExtreme(r1h);
-  const fourOk = r4h != null && isExtreme(r4h);
-  if(!oneOk && !fourOk) return null;
-
-  const both = oneOk && fourOk;
-  const depthOf = v => dir === 'bullish'
-    ? Math.max(0, Math.min(1, (bar - v) / bar))
-    : Math.max(0, Math.min(1, (v - (100 - bar)) / bar));
-  const depth = both ? (depthOf(r1h) + depthOf(r4h)) / 2 : depthOf(oneOk ? r1h : r4h);
-  // A relaxed-bar (with-trend) reading is real, but a 45-level pullback isn't the same
-  // conviction as a genuine sub-30 extreme — the score shouldn't pretend otherwise.
-  const base = both ? 45 : 30;
-  const points = Math.round((withTrend ? base * 0.85 : base) + depth * 10);
-
-  return { concrete: true, both, r1h, r4h, points, bar, withTrend };
-}
-
-// Trend pillar — Trader XO on 4H AND 1H both pointing the way of the trade. Timing comes from the arrow:
-// a fresh 1H (or 4H) arrow scores extra, and a whipsawing 1H trend (XO's own chop flag) is discounted.
-function confluenceTrend(token, dir){
-  const x4 = token.xo && token.xo.SIX_HOUR, x1 = token.xo && token.xo.ONE_HOUR;
-  if(!x4 || !x1) return null;
-  const want = dir === 'bullish' ? 'bull' : 'bear';
-  if(x4.state !== want || x1.state !== want) return null;
-  const a1 = x1.lastArrow && x1.lastArrow.dir === want ? x1.lastArrow : null;
-  const a4 = x4.lastArrow && x4.lastArrow.dir === want ? x4.lastArrow : null;
-  const fresh1 = !!(a1 && a1.barsAgo <= CONF_TREND_FRESH_1H);
-  const fresh4 = !!(a4 && a4.barsAgo <= CONF_TREND_FRESH_4H);
-  let points = 30 + (fresh1 ? 10 : 0) + (fresh4 ? 5 : 0);
-  if(x1.choppy) points -= 10;
-  return { concrete: true, points, fresh1, fresh4, choppy: !!x1.choppy,
-    arrow1Time: a1 && a1.time != null ? a1.time + XO_TF_MS.ONE_HOUR : null, aboveMacro1h: x1.aboveMacro };
-}
-
-// Volume — the last CLOSED 1H candle traded well above its recent average, and leaned the trade's way.
-// (A volume spike against the trade is a warning, not confirmation, so it earns nothing.)
-function confluenceVolume(token, dir){
-  const o = token.ohlc && token.ohlc.ONE_HOUR;
-  if(!o || !o.volumes || !o.closes) return null;
-  let n = o.closes.length;
-  if(o.times && o.times[n - 1] + XO_TF_MS.ONE_HOUR > Date.now()) n -= 1;      // drop the forming candle
-  if(n < 23) return null;
-  const base = o.volumes.slice(n - 21, n - 1).reduce((a, b) => a + b, 0) / 20;
-  if(!(base > 0)) return null;
-  const ratio = o.volumes[n - 1] / base;
-  if(ratio < CONF_VOL_SURGE) return null;
-  const withDir = dir === 'bullish' ? o.closes[n - 1] > o.closes[n - 2] : o.closes[n - 1] < o.closes[n - 2];
-  if(!withDir) return null;
-  return { ratio, points: Math.min(10, Math.round(4 + (ratio - CONF_VOL_SURGE) * 4)) };
-}
-
-// Funding — perpetual funding rate, % per 8h. Positive = longs pay shorts. Being on the crowded side costs
-// you carry and adds squeeze risk; the other side is paid to wait.
-let fundingMap = {}, fundingFetchedAt = 0, fundingLoading = false;
-async function refreshFunding(force){
-  if(fundingLoading || (!force && Date.now() - fundingFetchedAt < 5 * 60 * 1000)) return false;
-  fundingLoading = true;
-  try {
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 8000);
-    const res = await fetch('https://fapi.binance.com/fapi/v1/premiumIndex', { signal: ctl.signal, cache: 'no-store' });
-    clearTimeout(timer);
-    if(!res.ok) throw new Error('http ' + res.status);
-    const rows = await res.json();
-    const m = {};
-    (Array.isArray(rows) ? rows : []).forEach(r => {
-      if(r && typeof r.symbol === 'string' && r.symbol.endsWith('USDT') && r.lastFundingRate != null){
-        const v = parseFloat(r.lastFundingRate) * 100;
-        if(isFinite(v)) m[r.symbol.slice(0, -4)] = v;
-      }
-    });
-    if(Object.keys(m).length){ fundingMap = m; fundingFetchedAt = Date.now(); return true; }
-  } catch(e){ /* funding is a bonus signal — without it the score just has no funding term */ }
-  finally { fundingLoading = false; }
-  return false;
-}
-function confluenceFunding(token, dir){
-  const pct = fundingMap[token.symbol];
-  if(pct == null) return null;
-  const crowded = dir === 'bullish' ? pct >= CONF_FUNDING_CROWDED : pct <= -CONF_FUNDING_CROWDED;
-  const supportive = dir === 'bullish' ? pct <= 0 : pct >= 0;
-  const state = crowded ? 'crowded' : supportive ? 'supportive' : 'neutral';
-  return { rate: pct, state, points: crowded ? -5 : supportive ? 5 : 0 };
-}
-
-// A starting plan for the trade — entry at the current price, the stop just beyond the last 12 closed 1H
-// candles' swing (or the nearest same-side S/R level if that is tighter and not silly-close), the target at
-// the next opposing S/R level when it pays 1.5–5R, otherwise 2R. Mechanical defaults to edit, not advice.
-function confluencePlan(token, dir){
-  const o = token.ohlc && token.ohlc.ONE_HOUR;
-  const entry = token.price;
-  if(!o || !o.closes || !o.highs || !o.lows || !(entry > 0)) return null;
-  const long = dir === 'bullish';
-  let n = o.closes.length;
-  if(o.times && o.times[n - 1] + XO_TF_MS.ONE_HOUR > Date.now()) n -= 1;
-  if(n < 14) return null;
-  const buf = 0.0015;
-  const swing = long ? Math.min(...o.lows.slice(n - 12, n)) : Math.max(...o.highs.slice(n - 12, n));
-  let sl = long ? swing * (1 - buf) : swing * (1 + buf);
-  let stopBasis = long ? 'below the 12-candle 1H swing low' : 'above the 12-candle 1H swing high';
-  let levels = [];
-  try { levels = findSRLevels(o.closes, o.highs, o.lows, 100) || []; } catch(e){}
-  const sameSide = levels
-    .filter(l => l.type === (long ? 'support' : 'resistance') && (long ? l.price < entry && l.price > sl : l.price > entry && l.price < sl))
-    .filter(l => Math.abs(entry - l.price) / entry >= 0.005)
-    .sort((x, y) => Math.abs(entry - x.price) - Math.abs(entry - y.price));
-  if(sameSide.length){
-    sl = long ? sameSide[0].price * (1 - buf) : sameSide[0].price * (1 + buf);
-    stopBasis = (long ? 'below support ' : 'above resistance ') + fmtPrice(sameSide[0].price);
-  }
-  let risk = Math.abs(entry - sl);
-  if(!(risk > 0)) return null;
-  if(risk / entry * 100 < CONF_MIN_STOP_PCT){       // the swing/level is hugging price: a stop that close gets tagged by noise
-    const wasPct = (risk / entry * 100).toFixed(2);
-    risk = entry * CONF_MIN_STOP_PCT / 100;
-    sl = long ? entry - risk : entry + risk;
-    stopBasis = `${CONF_MIN_STOP_PCT}% minimum (the nearest structure is only ${wasPct}% away)`;
-  }
-  let tp = long ? entry + 2 * risk : entry - 2 * risk, targetBasis = '2R';
-  const opp = levels
-    .filter(l => l.type === (long ? 'resistance' : 'support') && (long ? l.price > entry : l.price < entry))
-    .sort((x, y) => Math.abs(entry - x.price) - Math.abs(entry - y.price));
-  for(const l of opp){
-    const rr = Math.abs(l.price - entry) / risk;
-    if(rr < 1.5) continue;                       // too close to be worth the risk — look at the next one
-    if(rr <= 5){ tp = long ? l.price * 0.998 : l.price * 1.002; targetBasis = (long ? 'next resistance ' : 'next support ') + fmtPrice(l.price); }
-    break;
-  }
-  const rr = Math.abs(tp - entry) / risk;
-  const sig = v => +v.toPrecision(6);
-  return { entry: sig(entry), sl: sig(sl), tp: sig(tp), rr: Math.round(rr * 10) / 10, riskPct: risk / entry * 100, stopBasis, targetBasis };
-}
-
-function confluenceOrderbook(token, dir){
-  const ob = obRaw.find(o => o.symbol === token.symbol);
-  if(!ob) return null;
-  const meets = dir === 'bullish' ? ob.imbalance >= CONF_OB_IMBALANCE : ob.imbalance <= -CONF_OB_IMBALANCE;
-  if(!meets) return null;
-  const magnitude = Math.min(1, (Math.abs(ob.imbalance) - CONF_OB_IMBALANCE) / (1 - CONF_OB_IMBALANCE));
-  const points = Math.round(30 + magnitude * 20);
-  return { concrete: true, imbalance: ob.imbalance, wallConfirmed: ob.wallConfirmed, points };
-}
-
-// Independent of pattern detection firing — reuses the same S/R zone finder
-// directly off stored candle data, so it's available even when no 3-Drive
-// pattern exists for this token at all.
-function confluenceSR(token, dir){
-  const ohlc = token.ohlc && token.ohlc.ONE_HOUR;
-  if(!ohlc || !ohlc.closes) return null;
-  let levels;
-  try { levels = findSRLevels(ohlc.closes, ohlc.highs, ohlc.lows, 100); } catch(e){ return null; }
-  if(!levels || !levels.length) return null;
-  const price = token.price;
-  const wantType = dir === 'bullish' ? 'support' : 'resistance';
-  const match = levels.find(l => l.type === wantType && Math.abs(price - l.price) / price <= CONF_SR_TOLERANCE);
-  if(!match) return null;
-  return { active: true, level: match.price, points: 15 };
-}
-
-function computeConfluenceSignal(token, dir){
-  const trend = getTokenTrend(token);
-  // Order Book isn't a mean-reversion tool — real-time resting supply/demand doesn't need
-  // trend adaptation the way RSI does, so it's untouched here.
-  const rsi = confluenceRSI(token, dir, trend);
-  const ob = confluenceOrderbook(token, dir);
-  const tr = confluenceTrend(token, dir);
-  const pillarCount = [rsi, ob, tr].filter(Boolean).length;
-  if(pillarCount < 2) return null; // the hard rule — 2 of 3 core pillars, no exceptions
-
-  const sr = confluenceSR(token, dir);
-  const vol = confluenceVolume(token, dir);
-  const fund = confluenceFunding(token, dir);
-  const rawScore = (rsi?.points||0) + (ob?.points||0) + (tr?.points||0) + (sr?.points||0) + (vol?.points||0) + (fund?.points||0);
-  const score = Math.max(0, Math.min(100, rawScore));   // what's shown, graded and alerted on
-  const grade = score >= 75 ? 'A' : 'B';
-
-  // Same treatment as 3-Drive: included, but clearly flagged when the overall call fights the
-  // established 4H trend — and hidden by default (see the "with 4H trend only" switch on the tab).
-  const trendConflict = (dir === 'bearish' && trend === 'up') || (dir === 'bullish' && trend === 'down');
-
-  return { symbol: token.symbol, name: token.name, icon: token.icon || null, price: token.price, direction: dir,
-    rsi, ob, trend: tr, sr, vol, fund, pillarCount, score, raw: rawScore, grade, trend4h: trend, trendConflict,
-    plan: confluencePlan(token, dir) };
-}
-
-// Builds the confluence list across all scanned tokens, both directions. Called fresh each render —
-// cheap (arithmetic over already-fetched data). Counter-trend calls are left out unless asked for.
-const CONF_TREND_ONLY_KEY = '3drive_conf_trend_only';
-function confTrendOnly(){ try { return localStorage.getItem(CONF_TREND_ONLY_KEY) !== '0'; } catch(e){ return true; } }
-function buildConfluenceSignals(opts){
-  const withTrendOnly = opts && opts.withTrendOnly != null ? opts.withTrendOnly : confTrendOnly();
-  const all = [];
-  for(const token of tokenData){
-    const bull = computeConfluenceSignal(token, 'bullish');
-    if(bull) all.push(bull);
-    const bear = computeConfluenceSignal(token, 'bearish');
-    if(bear) all.push(bear);
-  }
-  // Three agreeing pillars overshoot 100 almost every time, so ties at the cap are ordered by the uncapped
-  // score — otherwise the ranking would go flat exactly where the strongest signals are.
-  all.sort((a,b) => b.score - a.score || b.raw - a.raw || b.pillarCount - a.pillarCount);
-  const shown = withTrendOnly ? all.filter(x => !x.trendConflict) : all;
-  Object.defineProperty(shown, 'hidden', { value: all.length - shown.length, enumerable: false });
-  return shown;
-}
-
-function confPillarRow(icon, label, active, detail){
-  return `<div class="conf-pillar ${active?'conf-pillar-active':''}">
-    <div class="conf-pillar-icon">${icon}</div>
-    <div class="conf-pillar-label">${label}</div>
-    <div class="conf-pillar-detail">${detail||''}</div>
-  </div>`;
-}
-
-function confluenceCardHtml(sig){
-  const dir = sig.direction;
-  const rsiBar = sig.rsi ? sig.rsi.bar : CONF_RSI_EXTREME;
-  const rsiWhichTf = sig.rsi ? (sig.rsi.r1h!=null && (dir==='bullish'?sig.rsi.r1h<=rsiBar:sig.rsi.r1h>=100-rsiBar) ? '1H' : '4H') : null;
-  const rsiDetail = sig.rsi
-    ? `${sig.rsi.both ? '1H+4H' : rsiWhichTf} ${(sig.rsi.r1h??sig.rsi.r4h).toFixed(0)}${sig.rsi.withTrend ? ' (pullback)' : ''}`
-    : 'not extreme';
-  const obDetail = sig.ob ? `${sig.ob.imbalance>=0?'+':''}${(sig.ob.imbalance*100).toFixed(0)}%${sig.ob.wallConfirmed?' ✓':''}` : 'imbalance <50%';
-  const arrow = dir === 'bullish' ? '▲' : '▼';
-  let trendDetail = '4H and 1H not both ' + (dir === 'bullish' ? 'bull' : 'bear');
-  if(sig.trend){
-    const t = sig.trend;
-    const ago = t.arrow1Time != null ? Math.max(0, Date.now() - t.arrow1Time) : null;
-    trendDetail = `4H ${arrow} · 1H ${arrow}` + (t.fresh1 && ago != null ? ` · arrow ${xoFmtAgo(ago)}` : t.fresh4 ? ' · fresh 4H arrow' : '') + (t.choppy ? ' · ⚠ choppy' : '');
-  }
-
-  const bonus = [];
-  if(sig.sr) bonus.push(`<div class="conf-bonus-row">◎ S/R — price at ${fmtPrice(sig.sr.level)}</div>`);
-  if(sig.vol) bonus.push(`<div class="conf-bonus-row">▮ Volume ${sig.vol.ratio.toFixed(1)}× the 20-candle average</div>`);
-  if(sig.fund){
-    const f = sig.fund, r = (f.rate >= 0 ? '+' : '') + f.rate.toFixed(3) + '%';
-    bonus.push(f.state === 'crowded'
-      ? `<div class="conf-bonus-row conf-trend-warn">⚠ Funding ${r} — crowded ${dir === 'bullish' ? 'long' : 'short'}</div>`
-      : `<div class="conf-bonus-row">${f.state === 'supportive' ? '✓' : '·'} Funding ${r} (${f.state})</div>`);
-  }
-  const trendHtml = sig.trendConflict
-    ? `<div class="conf-bonus-row conf-trend-warn">⚠ AGAINST 4H TREND (4H is ${sig.trend4h})</div>`
-    : (sig.trend4h !== 'neutral' ? `<div class="conf-bonus-row conf-trend-ok">✓ aligned with 4H ${sig.trend4h}trend</div>` : '');
-
-  const pl = sig.plan;
-  const planHtml = pl
-    ? `<div class="conf-plan" title="Stop: ${pl.stopBasis}. Target: ${pl.targetBasis}.">
-         <span>entry ${fmtPrice(pl.entry)}</span><span>stop ${fmtPrice(pl.sl)} <em>(${pl.riskPct.toFixed(1)}%)</em></span><span>target ${fmtPrice(pl.tp)}</span><span class="conf-plan-rr">${pl.rr}R</span>
-       </div>`
-    : '';
-  const logBtn = `<button type="button" class="conf-log-btn" onclick="event.stopPropagation();confLogTrade('${sig.symbol}','${dir}')" title="Open the journal with entry, stop and target filled in — you review before saving">＋ Log trade</button>`;
-
-  return `<div class="conf-card conf-${dir}" onclick="window.open(tvUrl('${sig.symbol}','ONE_HOUR'),'_blank')" title="Open ${sig.symbol} on TradingView">
-    <div class="conf-card-header">
-      <div class="token-icon-row">
-        ${tokenIconHtml(sig, 22)}
-        <div>
-          <div class="conf-card-sym">${sig.symbol}</div>
-          <div class="conf-card-price">${fmtPrice(sig.price)}</div>
-        </div>
-      </div>
-      <div class="conf-dir-badge">${dir==='bullish'?'▲ LONG':'▼ SHORT'}</div>
-    </div>
-    <div class="conf-score-row">
-      <span class="conf-score">${sig.score}</span><span class="conf-score-max">/100</span>
-      <span class="conf-grade grade-${sig.grade}">${sig.grade}</span>
-    </div>
-    <div class="conf-bar-track"><div class="conf-bar-fill" style="width:${sig.score}%"></div></div>
-    <div class="conf-pillars">
-      ${confPillarRow('R', 'RSI', !!sig.rsi, rsiDetail)}
-      ${confPillarRow('▤', 'Order Book', !!sig.ob, obDetail)}
-      ${confPillarRow(dir==='bullish'?'↗':'↘', 'Trend (XO)', !!sig.trend, trendDetail)}
-    </div>
-    ${bonus.join('')}
-    ${trendHtml}
-    ${planHtml}
-    ${logBtn}
-  </div>`;
-}
-
 function conf3DriveCardHtml(token, tf, p){
   const dir = p.signal;
   const srTag = p.srLevel ? `<span class="conf-3d-tag">◎ ${p.srLevel}</span>` : '';
@@ -6520,15 +6199,9 @@ function conf3DriveCardHtml(token, tf, p){
   </div>`;
 }
 
-function setConfTrendOnly(on){
-  try { localStorage.setItem(CONF_TREND_ONLY_KEY, on ? '1' : '0'); } catch(e){}
-  renderConfluence();
-}
-
 function renderConfluence(){
   const driveGrid = document.getElementById('conf3DriveGrid');
-  const confGrid = document.getElementById('confSignalGrid');
-  if(!driveGrid || !confGrid) return;
+  if(!driveGrid) return;
 
   // Three Drives — every active-TF signal across all scanned tokens, sorted by confidence
   const driveCards = [];
@@ -6543,21 +6216,10 @@ function renderConfluence(){
     ? driveCards.map(d => conf3DriveCardHtml(d.token, d.tf, d.p)).join('')
     : '<div class="gl-empty">No Three Drives signals this scan.</div>';
 
-  // Confluence signals
-  const signals = buildConfluenceSignals();
-  const trendOnly = confTrendOnly();
-  const tb = document.getElementById('confTrendOnlyBtn');
-  if(tb){ tb.setAttribute('aria-pressed', String(trendOnly)); tb.classList.toggle('active', trendOnly); }
-  const hid = document.getElementById('confHiddenNote');
-  if(hid) hid.textContent = trendOnly && signals.hidden ? `${signals.hidden} counter-trend signal${signals.hidden > 1 ? 's' : ''} hidden` : '';
-  confGrid.innerHTML = signals.length
-    ? signals.map(confluenceCardHtml).join('')
-    : '<div class="gl-empty">No confluence signals this scan — needs 2 of RSI / Order Book / Trend (XO) concrete in the same direction.</div>';
-  // funding arrives on its own clock — fetch it (at most every 5 min) and redraw once it lands
-  if(Date.now() - fundingFetchedAt > 5 * 60 * 1000 && tokenData.length) refreshFunding().then(ok => { if(ok && currentView === 'confluence') renderConfluence(); });
-
   const upd = document.getElementById('confUpdated');
   if(upd) upd.textContent = 'last update: '+new Date().toLocaleTimeString();
+
+  renderWeeklySummary();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -7627,53 +7289,197 @@ function calcWeeklyBalance(weekTrades, startingBalance, riskAmount) {
   };
 }
 
+// ══════════════════════════════════════════════════════════
+// WEEKLY / MONTHLY SUMMARY — a read of the journal, not a signal. Lives in the Confluence tab
+// under Three Drives. Figures use the same win-rate/R formulas as the journal's own per-week
+// summary row, and $ P&L the same margin x leverage x move% model as Weekly Balance
+// (see jTradePnL / calcWeeklyBalance above), so the numbers agree everywhere they're shown.
+// ══════════════════════════════════════════════════════════
+function wsComputeStats(trades, margin){
+  const closed = trades.filter(t => t.result !== 'open');
+  const wins = trades.filter(t => t.result === 'win').length;
+  const losses = trades.filter(t => t.result === 'loss').length;
+  const bes = trades.filter(t => t.result === 'be').length;
+  const open = trades.length - closed.length;
+  const winRate = closed.length ? Math.round(wins / closed.length * 100) : null;
+  const totalR = trades.filter(t => t.r != null).reduce((a, t) => a + t.r, 0);
+  let totalPnl = 0, best = null, worst = null;
+  closed.forEach(t => {
+    const pnl = jTradePnL(t, margin);
+    totalPnl += pnl;
+    if(best === null || pnl > best.pnl) best = { symbol: t.symbol, pnl };
+    if(worst === null || pnl < worst.pnl) worst = { symbol: t.symbol, pnl };
+  });
+  return {
+    trades: trades.length, closed: closed.length, wins, losses, bes, open, winRate,
+    totalR, totalPnl, avgR: closed.length ? totalR / closed.length : null,
+    avgPnl: closed.length ? totalPnl / closed.length : null, best, worst
+  };
+}
+function wsStatsHtml(s){
+  const r = (v, d) => v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(d);
+  const usd = v => v == null ? '—' : (v >= 0 ? '+$' : '−$') + Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const cls = v => v == null ? '' : v > 0 ? 'green' : v < 0 ? 'red' : '';
+  return `
+    <div class="ws-stat"><div class="ws-stat-label">Trades</div><div class="ws-stat-val blue">${s.trades}</div>${s.open ? `<div class="ws-stat-sub">${s.open} open</div>` : ''}</div>
+    <div class="ws-stat"><div class="ws-stat-label">Win rate</div><div class="ws-stat-val amber">${s.winRate == null ? '—' : s.winRate + '%'}</div><div class="ws-stat-sub">${s.wins}W · ${s.losses}L · ${s.bes}BE</div></div>
+    <div class="ws-stat"><div class="ws-stat-label">Total R</div><div class="ws-stat-val ${cls(s.totalR)}">${r(s.totalR, 2)}R</div><div class="ws-stat-sub">avg ${r(s.avgR, 2)}R</div></div>
+    <div class="ws-stat"><div class="ws-stat-label">Total P&amp;L</div><div class="ws-stat-val ${cls(s.totalPnl)}">${usd(s.totalPnl)}</div><div class="ws-stat-sub">avg ${usd(s.avgPnl)}</div></div>
+    <div class="ws-stat"><div class="ws-stat-label">Best trade</div><div class="ws-stat-val green">${s.best ? usd(s.best.pnl) : '—'}</div><div class="ws-stat-sub">${s.best ? s.best.symbol : ''}</div></div>
+    <div class="ws-stat"><div class="ws-stat-label">Worst trade</div><div class="ws-stat-val red">${s.worst ? usd(s.worst.pnl) : '—'}</div><div class="ws-stat-sub">${s.worst ? s.worst.symbol : ''}</div></div>`;
+}
+// One bar per bucket ({label, pnl}); zero-crossing baseline; green above, red below.
+// Follows the same Canvas 2D + dark/light-aware approach as drawDepthChart above.
+function wsDrawChart(canvasId, buckets){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  const W = canvas.parentElement.clientWidth, H = canvas.parentElement.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = W * dpr; canvas.height = H * dpr; canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  if(!ctx) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const isDark = !document.documentElement.hasAttribute('data-theme') || document.documentElement.getAttribute('data-theme') === 'dark';
+  const textCol = isDark ? '#666' : '#999', gridCol = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+  const green = isDark ? '#00e5a0' : '#059669', red = isDark ? '#ff3d68' : '#dc2626';
+
+  const padTop = 10, padBottom = 22, padSide = 8;
+  const plotW = W - padSide * 2, plotH = H - padTop - padBottom;
+  const maxAbs = Math.max(1, ...buckets.map(b => Math.abs(b.pnl)));
+  const zeroY = padTop + plotH / 2;
+  const toY = v => zeroY - (v / maxAbs) * (plotH / 2 - 4);
+
+  ctx.strokeStyle = gridCol; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(padSide, zeroY); ctx.lineTo(W - padSide, zeroY); ctx.stroke();
+
+  const n = buckets.length, slot = plotW / n, barW = Math.max(6, Math.min(46, slot * 0.55));
+  ctx.font = '10px monospace'; ctx.textAlign = 'center';
+  buckets.forEach((b, i) => {
+    const cx = padSide + slot * (i + 0.5);
+    const y0 = toY(0), y1 = toY(b.pnl);
+    ctx.fillStyle = b.pnl > 0 ? green : b.pnl < 0 ? red : gridCol;
+    const top = Math.min(y0, y1), h = Math.max(1, Math.abs(y1 - y0));
+    const rad = Math.min(4, barW / 2, h);
+    ctx.beginPath();
+    if(ctx.roundRect) ctx.roundRect(cx - barW / 2, top, barW, h, b.pnl >= 0 ? [rad, rad, 0, 0] : [0, 0, rad, rad]);
+    else ctx.rect(cx - barW / 2, top, barW, h);
+    ctx.fill();
+    ctx.fillStyle = textCol;
+    ctx.fillText(b.label, cx, H - 6);
+  });
+}
+function wsRangeLabel(days){ return weekLabel(days); }
+// clears stale bars from a previous render when the current range has nothing to chart
+function wsClearChart(canvasId){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if(ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+// ── the compact card under Three Drives ──
+function renderWeeklySummary(){
+  const el = document.getElementById('wsStats');
+  if(!el) return;
+  const days = getWeekDates(0);
+  const allData = jLoad();
+  const trades = days.flatMap(d => allData[dateKey(d)] || []);
+  const margin = (wbLoadSettings().riskAmount != null) ? wbLoadSettings().riskAmount : 300;
+  const stats = wsComputeStats(trades, margin);
+  document.getElementById('wsRange').textContent = 'This week (' + wsRangeLabel(days) + ') · ' + trades.length + ' trade' + (trades.length === 1 ? '' : 's') + ' logged';
+  el.innerHTML = wsStatsHtml(stats);
+
+  const buckets = days.map(d => {
+    const dayTrades = (allData[dateKey(d)] || []).filter(t => t.result !== 'open');
+    const pnl = dayTrades.reduce((a, t) => a + jTradePnL(t, margin), 0);
+    return { label: ['M','T','W','T','F','S','S'][d.getDay() === 0 ? 6 : d.getDay() - 1], pnl };
+  });
+  const hasData = stats.closed > 0;
+  document.getElementById('wsChartEmpty').style.display = hasData ? 'none' : 'flex';
+  if(hasData) wsDrawChart('wsChartCanvas', buckets); else wsClearChart('wsChartCanvas');
+}
+
+// ── the expanded Week/Month modal ──
+let wsMode = 'week';      // 'week' | 'month'
+let wsWeekOffset = 0;     // weeks back from this week (Week mode)
+let wsMonthOffset = 0;    // months back from this month (Month mode)
+function openSummaryModal(){
+  wsMode = 'week'; wsWeekOffset = 0; wsMonthOffset = 0;
+  document.getElementById('summaryOverlay').classList.add('open');   // laid out first — canvas needs real dimensions to draw into
+  renderSummaryModal();
+}
+function closeSummaryModal(){
+  document.getElementById('summaryOverlay').classList.remove('open');
+}
+function setSummaryMode(mode){
+  wsMode = mode;
+  document.getElementById('wsModeWeekBtn').setAttribute('aria-selected', String(mode === 'week'));
+  document.getElementById('wsModeMonthBtn').setAttribute('aria-selected', String(mode === 'month'));
+  renderSummaryModal();
+}
+function summaryNav(dir){
+  if(wsMode === 'week') wsWeekOffset += dir; else wsMonthOffset += dir;
+  renderSummaryModal();
+}
+function renderSummaryModal(){
+  const allData = jLoad();
+  const margin = (wbLoadSettings().riskAmount != null) ? wbLoadSettings().riskAmount : 300;
+
+  if(wsMode === 'week'){
+    const days = getWeekDates(wsWeekOffset);
+    const trades = days.flatMap(d => allData[dateKey(d)] || []);
+    document.getElementById('wsModalRange').textContent = wsRangeLabel(days);
+    document.getElementById('wsModalStats').innerHTML = wsStatsHtml(wsComputeStats(trades, margin));
+    const buckets = days.map(d => {
+      const dayTrades = (allData[dateKey(d)] || []).filter(t => t.result !== 'open');
+      return { label: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][d.getDay() === 0 ? 6 : d.getDay() - 1],
+        pnl: dayTrades.reduce((a, t) => a + jTradePnL(t, margin), 0) };
+    });
+    const hasData = trades.some(t => t.result !== 'open');
+    document.getElementById('wsModalChartEmpty').style.display = hasData ? 'none' : 'flex';
+    if(hasData) wsDrawChart('wsModalCanvas', buckets); else wsClearChart('wsModalCanvas');
+    document.getElementById('wsModalNote').textContent = 'One bar per day, ' + wsRangeLabel(days) + '. Margin per trade: $' + margin.toLocaleString();
+  } else {
+    const now = new Date();
+    const target = new Date(now.getFullYear(), now.getMonth() + wsMonthOffset, 1);
+    const monthLabel = target.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    // group the month's calendar-week rows (Mon-start, matching getWeekDates) into buckets
+    const first = new Date(target.getFullYear(), target.getMonth(), 1);
+    const last = new Date(target.getFullYear(), target.getMonth() + 1, 0);
+    const weeks = [];
+    let cursor = new Date(first);
+    cursor.setDate(cursor.getDate() - (cursor.getDay() === 0 ? 6 : cursor.getDay() - 1)); // back to that week's Monday
+    let wk = 1;
+    while(cursor <= last){
+      const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(cursor); d.setDate(cursor.getDate() + i); return d; });
+      const inMonth = weekDays.filter(d => d.getMonth() === target.getMonth());
+      if(inMonth.length){ weeks.push({ label: 'W' + wk, days: weekDays }); wk++; }
+      cursor.setDate(cursor.getDate() + 7);
+    }
+    const monthTrades = weeks.flatMap(w => w.days.filter(d => d.getMonth() === target.getMonth()).flatMap(d => allData[dateKey(d)] || []));
+    document.getElementById('wsModalRange').textContent = monthLabel;
+    document.getElementById('wsModalStats').innerHTML = wsStatsHtml(wsComputeStats(monthTrades, margin));
+    const buckets = weeks.map(w => {
+      const wTrades = w.days.filter(d => d.getMonth() === target.getMonth()).flatMap(d => allData[dateKey(d)] || []).filter(t => t.result !== 'open');
+      return { label: w.label, pnl: wTrades.reduce((a, t) => a + jTradePnL(t, margin), 0) };
+    });
+    const hasData = monthTrades.some(t => t.result !== 'open');
+    document.getElementById('wsModalChartEmpty').style.display = hasData ? 'none' : 'flex';
+    if(hasData) wsDrawChart('wsModalCanvas', buckets); else wsClearChart('wsModalCanvas');
+    document.getElementById('wsModalNote').textContent = 'One bar per calendar week of ' + monthLabel + '. Margin per trade: $' + margin.toLocaleString();
+  }
+}
+// redraw on theme change and resize, same as any canvas chart
+window.addEventListener('resize', () => {
+  if(currentView === 'confluence') renderWeeklySummary();
+  if(document.getElementById('summaryOverlay')?.classList.contains('open')) renderSummaryModal();
+});
+
 // Remember the leverage you actually use — the form used to snap back to 10 after every save.
 const J_LEV_KEY = '3drive_last_leverage';
 function jLastLeverage(){
   try { const v = parseFloat(localStorage.getItem(J_LEV_KEY)); return v >= 1 && v <= 100 ? v : 10; } catch(e){ return 10; }
-}
-
-// "Log trade" on a confluence card: open today's journal with the form filled in. Nothing is saved
-// until you press Save Trade, so entry / stop / target are yours to change.
-let jSignalMeta = null;
-function jLogFromSignal(meta){
-  jWeekOffset = 0;                        // always land on the current week, whichever one you were browsing
-  openJournal();                          // selects today and renders the day (with the add-trade form)
-  jToggleForm();
-  const set = (id, v) => { const el = document.getElementById(id); if(el && v != null) el.value = v; };
-  set('jToken', meta.symbol);
-  set('jDir', meta.dir);
-  set('jTf', meta.tf);
-  set('jLeverage', jLastLeverage());
-  set('jEntry', meta.entry);
-  set('jSl', meta.sl);
-  set('jTp', meta.tp);
-  set('jNotes', meta.notes);
-  set('jResult', 'open');                 // a fresh signal is an open trade (the form's default is Win)
-  jSignalMeta = meta;
-  jUpdatePosCalc();
-}
-function confLogTrade(symbol, dir){
-  const token = findTokenBySymbol(symbol);
-  if(!token) return;
-  const sig = computeConfluenceSignal(token, dir);
-  const plan = (sig && sig.plan) || confluencePlan(token, dir);
-  if(!plan) return;
-  const parts = [];
-  if(sig){
-    parts.push(`Confluence ${sig.grade} (${sig.score})`);
-    parts.push([sig.rsi ? 'RSI' : null, sig.ob ? 'Order Book' : null, sig.trend ? 'Trend' : null].filter(Boolean).join(' + '));
-    if(sig.sr) parts.push('at S/R');
-    if(sig.vol) parts.push(`vol ${sig.vol.ratio.toFixed(1)}x`);
-    if(sig.fund) parts.push(`funding ${sig.fund.rate >= 0 ? '+' : ''}${sig.fund.rate.toFixed(3)}%`);
-  }
-  parts.push(`stop ${plan.stopBasis}`, `target ${plan.targetBasis}`);
-  jLogFromSignal({
-    symbol, dir: dir === 'bullish' ? 'long' : 'short', tf: '1H',
-    entry: plan.entry, sl: plan.sl, tp: plan.tp,
-    notes: parts.join(' · '),
-    setup: 'confluence', score: sig ? sig.score : null, grade: sig ? sig.grade : null
-  });
 }
 
 function jToggleForm() {
@@ -7772,7 +7578,6 @@ function jSaveTrade(dateKey) {
     tp:         tp||null,
     slHistory:  [{ time: now.toISOString(), sl }],
     scaleOuts:  [],
-    ...(jSignalMeta && jSignalMeta.symbol === symbol ? { setup: jSignalMeta.setup, score: jSignalMeta.score, grade: jSignalMeta.grade } : {}),
     exit:       exit||null,
     result, notes,
     autoResolved: false,
@@ -7792,7 +7597,6 @@ function jSaveTrade(dateKey) {
     el.value=''; el.style.borderColor='';
   });
   try { localStorage.setItem(J_LEV_KEY, String(leverage)); } catch(e){}
-  jSignalMeta = null;
   document.getElementById('jLeverage').value = String(jLastLeverage()); // your last leverage, not a hard-coded 10
   document.getElementById('addTradeForm').classList.remove('open');
 
@@ -8331,11 +8135,10 @@ document.addEventListener('keydown', function(e){
             <label class="al-chip bull"><input type="checkbox" id="alertOnBull" checked onchange="alertSaveSettings()"><span>↑ Bullish 3-Drive</span></label>
             <label class="al-chip bear"><input type="checkbox" id="alertOnBear" checked onchange="alertSaveSettings()"><span>↓ Bearish 3-Drive</span></label>
             <label class="al-chip purple"><input type="checkbox" id="alertOnSqueeze" onchange="alertSaveSettings()"><span>◈ BB Squeeze</span></label>
-            <label class="al-chip"><input type="checkbox" id="alertOnConfluence" onchange="alertSaveSettings()"><span>⬢ Confluence</span></label>
           </div>
         </div>
 
-        <p class="al-foot" id="alertStatus">Emails only go out when a signal lands <strong>at S/R confluence</strong> (the ◎ badge). Naked signals without S/R are ignored. Confluence means RSI, Order Book and the Trader XO trend agreeing (at least two of the three).</p>
+        <p class="al-foot" id="alertStatus">Emails only go out when a signal lands <strong>at S/R confluence</strong> (the ◎ badge). Naked signals without S/R are ignored.</p>
         <div id="alertLastSent" class="al-row-hint" style="margin-top:4px"></div>
       </section>
 
@@ -8356,7 +8159,6 @@ function alertSaveSettings(){
   s.onBull     = document.getElementById('alertOnBull').checked;
   s.onBear     = document.getElementById('alertOnBear').checked;
   s.onSqueeze  = document.getElementById('alertOnSqueeze').checked;
-  s.onConfluence = document.getElementById('alertOnConfluence').checked;
   localStorage.setItem(ALERT_KEY, JSON.stringify(s));
 }
 function alertSaveEmail(){
@@ -8372,7 +8174,6 @@ function openAlerts(tab){
   document.getElementById('alertOnBull').checked    = s.onBull    !== false;
   document.getElementById('alertOnBear').checked    = s.onBear    !== false;
   document.getElementById('alertOnSqueeze').checked = !!s.onSqueeze;
-  document.getElementById('alertOnConfluence').checked = !!s.onConfluence;
   if(s.lastSent) document.getElementById('alertLastSent').textContent = 'Last sent: '+new Date(s.lastSent).toLocaleString();
   xoLogNewSince = xoSeenAt();      // read before marking seen, so this view can highlight what's new
   xoMarkAlertsSeen();
@@ -9128,40 +8929,6 @@ async function alertsAfterScan(results){
 // Confluence needs Order Book data — which finishes after the main scan loop,
 // not synchronously with it. Reuses the same email + "min confidence" threshold
 // settings so there's only one set of numbers to configure, not two.
-async function confluenceAlertsCheck(){
-  const s = alertLoadSettings();
-  if(!s.email) return;
-  if(!s.onConfluence) return; // opt-in, off by default
-
-  const threshold = s.threshold || 70;
-  const signals = buildConfluenceSignals().filter(sig => sig.score >= threshold);
-  if(!signals.length) return;
-
-  const matching = signals.map(sig => ({
-    token: sig.symbol, signal: sig.direction, type: 'confluence',
-    tf: '—',
-    price: fmtPrice(sig.price),
-    confidence: sig.score,
-    pillars: [sig.rsi ? 'RSI' : null, sig.ob ? 'Order Book' : null, sig.trend ? 'Trend (XO)' : null].filter(Boolean).join(' + '),
-    srBonus: !!sig.sr,
-    trendConflict: !!sig.trendConflict,
-    trend4h: sig.trend4h,
-  }));
-
-  try {
-    const res = await fetch('/.netlify/functions/send-alert',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ email: s.email, alerts: matching })
-    });
-    if(res.ok){
-      const saved = alertLoadSettings();
-      saved.lastSent = Date.now();
-      localStorage.setItem(ALERT_KEY, JSON.stringify(saved));
-      log(`Confluence alert sent: ${matching.length} signal${matching.length>1?'s':''} → ${s.email}`,'ok');
-    }
-  } catch(e){ log('Confluence alert send failed: '+e.message,'err'); }
-}
 </script>
 
 <!-- HIT RATE TRACKER MODAL -->

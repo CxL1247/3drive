@@ -28,14 +28,15 @@ Search any scanned token to open a floating popup combining Pattern, RSI, Range,
 
 ## Confluence tab
 
-A token gets a Confluence signal (long or short) when **at least two of three core pillars agree**: **RSI** at an extreme (1H/4H), **Order Book** imbalance of 50%+, and the **Trend** pillar, which is Trader XO (EMA 12/50) pointing the same way on **both 4H and 1H**. A fresh 1H arrow (within 3 closed candles) or 4H arrow scores extra, and a whipsawing 1H trend (XO's chop flag) is discounted. On top of that, **S/R** (price at a same-side level), **volume** (the last closed 1H candle at 1.5x+ the 20-candle average and leaning with the trade) and **funding** (Binance perp funding; supportive is a small bonus, crowded a small penalty) adjust the score. **The Range (FRVP) engine no longer weighs anything here**; it still runs and shows in the token popup.
+Two sections: **Three Drives** (the classic harmonic pattern signals, unrelated to anything below) and **Weekly Summary**. The standalone RSI + Order Book + Trend confluence scoring engine has been retired — the tab now pairs pattern signals with a read of your own trading, not a second signal generator.
 
-- The 4H trend used by this tab is Trader XO's 4H state (falling back to the older EMA-slope read for tokens without XO data), so a card can't call itself "aligned with the 4H uptrend" while the Trend pillar disagrees.
-- **"with 4H trend only"** (on by default) hides signals that fight the 4H trend; the tab says how many are hidden. It applies to the emailed confluence alerts too.
-- Scores are capped at 100 for display and alerts. Because three agreeing pillars overshoot the cap almost every time, ties at 100 are ordered by the uncapped score, so the ranking doesn't go flat.
-- Each card shows a **starting plan**: entry at the current price; the stop beyond the last 12 closed 1H candles' swing (or a nearer same-side S/R level that is at least 0.5% away), never closer than 0.6%; the target at the next opposing S/R level if it pays 1.5-5R, otherwise 2R. These are mechanical defaults to edit, not advice.
-- **＋ Log trade** opens today's journal with the form filled in as an *open* trade: token, direction, 1H, entry, stop, target, your last-used leverage, and a note summarising why. Nothing is saved until you press Save Trade. Saved trades carry `setup: confluence` and the score, and the CSV export has Setup and Score columns, so the journal can later be sliced by setup.
-- The journal form now remembers the leverage you last used instead of snapping back to 10.
+### Weekly Summary
+
+A read of the Trading Journal, not a signal: figures and a bar chart for the current week's logged trades, always visible under Three Drives (no scan needed).
+
+- **Figures:** trades, win rate (wins / all closed trades, matching the journal's own weekly row), total R, total $ P&L, best and worst trade. $ uses the same margin x leverage x price-move model as Weekly Balance (`jTradePnL`), so the numbers agree with the journal everywhere they're shown.
+- **Chart:** one bar per weekday (Mon-Sun), each day's $ P&L, green above/red below a zero line.
+- **⤢ expand** opens a bigger view with a **Week / Month** switch and previous/next navigation. Month mode buckets the calendar weeks of the selected month (W1, W2, ...) instead of days, so it stays readable at either scale.
 
 ## Top bar
 
