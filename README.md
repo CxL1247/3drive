@@ -35,7 +35,7 @@ Two sections: **Three Drives** (the classic harmonic pattern signals, unrelated 
 A read of the Trading Journal, not a signal: figures and a bar chart for the current week's logged trades, always visible under Three Drives (no scan needed).
 
 - **Figures:** trades, win rate (wins / all closed trades, matching the journal's own weekly row), total R, total $ P&L, best and worst trade. $ uses the same margin x leverage x price-move model as Weekly Balance (`jTradePnL`), so the numbers agree with the journal everywhere they're shown.
-- **Chart:** one bar per weekday (Mon-Sun), each day's $ P&L, green above/red below a zero line.
+- **Chart:** a smooth cumulative-P&L line (Mon-Sun for the week, W1-W5 for the month), with a soft gradient fill down to zero, glow, and dot markers. Green if the range finished at or above zero, red if below. Hover any point for that day's (or week's) running total and its own change.
 - **⤢ expand** opens a bigger view with a **Week / Month** switch and previous/next navigation. Month mode buckets the calendar weeks of the selected month (W1, W2, ...) instead of days, so it stays readable at either scale.
 
 ## Top bar

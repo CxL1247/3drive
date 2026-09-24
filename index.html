@@ -768,6 +768,16 @@ input.ctrl::placeholder { color: var(--text-3); }
 .ws-canvas { width: 100%; height: 100%; display: block; }
 .ws-chart-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--font-ui); font-size: 0.78rem; color: var(--text-2); text-align: center; padding: var(--sp-4); }
 .ws-chart-note { font-family: var(--font-ui); font-size: 0.68rem; color: var(--text-2); margin-top: var(--sp-3); line-height: 1.5; }
+.ws-canvas { cursor: crosshair; }
+.ws-tooltip {
+  display: none; position: fixed; z-index: 500; pointer-events: none;
+  background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-md);
+  padding: 6px 10px; box-shadow: var(--shadow-lg); white-space: nowrap;
+  font-family: var(--font-mono); transition: left var(--t-fast) linear, top var(--t-fast) linear;
+}
+.ws-tip-day { font-size: 0.6rem; letter-spacing: 1px; color: var(--text-3); text-transform: uppercase; }
+.ws-tip-cum { font-size: 0.85rem; font-weight: 800; margin-top: 1px; }
+.ws-tip-delta { font-size: 0.62rem; color: var(--text-2); margin-top: 1px; }
 @media (max-width: 620px) {
   .ws-head { flex-wrap: wrap; }
   .ws-stats { grid-template-columns: repeat(3, 1fr); }
@@ -7330,6 +7340,18 @@ function wsStatsHtml(s){
 }
 // One bar per bucket ({label, pnl}); zero-crossing baseline; green above, red below.
 // Follows the same Canvas 2D + dark/light-aware approach as drawDepthChart above.
+// Smooth path through points using a vertical-tangent bezier at each midpoint — a light, cheap
+// smoothing that avoids over/undershoot (no need for full Catmull-Rom for 5-7 points).
+function wsSmoothPath(ctx, pts){
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for(let i = 1; i < pts.length; i++){
+    const midX = (pts[i - 1].x + pts[i].x) / 2;
+    ctx.bezierCurveTo(midX, pts[i - 1].y, midX, pts[i].y, pts[i].x, pts[i].y);
+  }
+}
+// Cumulative equity line for the range: running total of each bucket's $ P&L, smoothed, with a
+// gradient fill to the zero baseline, dashed reference lines, dot markers and a hover tooltip.
+// Colour follows the range's own result — green if it finished at/above zero, red if below.
 function wsDrawChart(canvasId, buckets){
   const canvas = document.getElementById(canvasId);
   if(!canvas) return;
@@ -7341,41 +7363,106 @@ function wsDrawChart(canvasId, buckets){
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
   const isDark = !document.documentElement.hasAttribute('data-theme') || document.documentElement.getAttribute('data-theme') === 'dark';
-  const textCol = isDark ? '#666' : '#999', gridCol = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+  const textCol = isDark ? '#666' : '#999', gridCol = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+  const zeroCol = isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.16)';
   const green = isDark ? '#00e5a0' : '#059669', red = isDark ? '#ff3d68' : '#dc2626';
+  const dotFill = isDark ? '#0a0e1a' : '#ffffff';
 
-  const padTop = 10, padBottom = 22, padSide = 8;
+  let cum = 0;
+  const points = buckets.map(b => { cum += b.pnl; return { label: b.label, delta: b.pnl, cum }; });
+  const line = points[points.length - 1].cum >= 0 ? green : red;
+
+  const padTop = 16, padBottom = 22, padSide = 12;
   const plotW = W - padSide * 2, plotH = H - padTop - padBottom;
-  const maxAbs = Math.max(1, ...buckets.map(b => Math.abs(b.pnl)));
-  const zeroY = padTop + plotH / 2;
-  const toY = v => zeroY - (v / maxAbs) * (plotH / 2 - 4);
+  const vals = points.map(p => p.cum).concat(0);
+  const maxV = Math.max(...vals), minV = Math.min(...vals);
+  const span = Math.max(maxV - minV, Math.max(1, maxV, -minV) * 0.1, 1);   // never a perfectly flat scale
+  const lo = minV - span * 0.12, hi = maxV + span * 0.12, fullSpan = hi - lo;
+  const n = points.length;
+  const xAt = i => n > 1 ? padSide + (plotW * i) / (n - 1) : padSide + plotW / 2;
+  const yAt = v => padTop + plotH - ((v - lo) / fullSpan) * plotH;
+  const zeroY = yAt(0);
 
+  // reference gridlines: top, zero (solid-ish, brighter) and bottom
   ctx.strokeStyle = gridCol; ctx.lineWidth = 1;
+  [padTop, padTop + plotH].forEach(y => { ctx.beginPath(); ctx.moveTo(padSide, y); ctx.lineTo(W - padSide, y); ctx.stroke(); });
+  ctx.strokeStyle = zeroCol; ctx.setLineDash([3, 4]);
   ctx.beginPath(); ctx.moveTo(padSide, zeroY); ctx.lineTo(W - padSide, zeroY); ctx.stroke();
+  ctx.setLineDash([]);
 
-  const n = buckets.length, slot = plotW / n, barW = Math.max(6, Math.min(46, slot * 0.55));
-  ctx.font = '10px monospace'; ctx.textAlign = 'center';
-  buckets.forEach((b, i) => {
-    const cx = padSide + slot * (i + 0.5);
-    const y0 = toY(0), y1 = toY(b.pnl);
-    ctx.fillStyle = b.pnl > 0 ? green : b.pnl < 0 ? red : gridCol;
-    const top = Math.min(y0, y1), h = Math.max(1, Math.abs(y1 - y0));
-    const rad = Math.min(4, barW / 2, h);
+  const pts = points.map((p, i) => ({ x: xAt(i), y: yAt(p.cum) }));
+
+  if(pts.length > 1){
+    // gradient fill from the line down (or up) to the zero baseline
     ctx.beginPath();
-    if(ctx.roundRect) ctx.roundRect(cx - barW / 2, top, barW, h, b.pnl >= 0 ? [rad, rad, 0, 0] : [0, 0, rad, rad]);
-    else ctx.rect(cx - barW / 2, top, barW, h);
+    ctx.moveTo(pts[0].x, zeroY);
+    ctx.lineTo(pts[0].x, pts[0].y);
+    wsSmoothPath(ctx, pts);
+    ctx.lineTo(pts[pts.length - 1].x, zeroY);
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
+    const top = line === green ? 'rgba(0,229,160,0.30)' : 'rgba(255,61,104,0.30)';
+    const bottom = line === green ? 'rgba(0,229,160,0)' : 'rgba(255,61,104,0)';
+    grad.addColorStop(0, top); grad.addColorStop(1, bottom);
+    ctx.fillStyle = grad; ctx.fill();
+
+    // the line itself
+    ctx.beginPath(); wsSmoothPath(ctx, pts);
+    ctx.strokeStyle = line; ctx.lineWidth = 2.25; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.shadowColor = line; ctx.shadowBlur = 6;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // dot at every point; the last one (today / the range's end) stands out
+  pts.forEach((pt, i) => {
+    const isLast = i === pts.length - 1;
+    ctx.beginPath(); ctx.arc(pt.x, pt.y, isLast ? 4.5 : 2.75, 0, Math.PI * 2);
+    ctx.fillStyle = isLast ? line : dotFill;
     ctx.fill();
-    ctx.fillStyle = textCol;
-    ctx.fillText(b.label, cx, H - 6);
+    ctx.lineWidth = isLast ? 0 : 1.75; ctx.strokeStyle = line;
+    if(!isLast) ctx.stroke();
   });
+
+  ctx.fillStyle = textCol; ctx.font = '10px monospace'; ctx.textAlign = 'center'; ctx.shadowBlur = 0;
+  points.forEach((p, i) => ctx.fillText(p.label, xAt(i), H - 6));
+
+  wsAttachHover(canvas, pts, points, line);
 }
 function wsRangeLabel(days){ return weekLabel(days); }
-// clears stale bars from a previous render when the current range has nothing to chart
+// clears stale drawing from a previous render when the current range has nothing to chart
 function wsClearChart(canvasId){
   const canvas = document.getElementById(canvasId);
   if(!canvas) return;
   const ctx = canvas.getContext('2d');
   if(ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  wsHideTooltip();
+}
+
+// ── Hover tooltip: one shared floating element reused by every chart instance ──
+function wsFmtUsd(v){ return (v >= 0 ? '+$' : '\u2212$') + Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+function wsHideTooltip(){
+  const tip = document.getElementById('wsTooltip');
+  if(tip) tip.style.display = 'none';
+}
+function wsAttachHover(canvas, pts, points, lineColor){
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    let idx = 0, best = Infinity;
+    pts.forEach((pt, i) => { const d = Math.abs(pt.x - x); if(d < best){ best = d; idx = i; } });
+    const p = points[idx], pt = pts[idx];
+    const tip = document.getElementById('wsTooltip');
+    if(!tip) return;
+    tip.innerHTML = `<div class="ws-tip-day">${p.label}</div><div class="ws-tip-cum" style="color:${lineColor}">${wsFmtUsd(p.cum)}</div><div class="ws-tip-delta">${p.delta === 0 ? 'no closed trades' : wsFmtUsd(p.delta) + ' that day'}</div>`;
+    tip.style.display = 'block';
+    const left = rect.left + pt.x, top = rect.top + pt.y;
+    tip.style.left = Math.max(6, Math.min(left - tip.offsetWidth / 2, window.innerWidth - tip.offsetWidth - 6)) + 'px';
+    // prefer above the dot; flip below it if that would spill above the chart card itself
+    const above = top - tip.offsetHeight - 12;
+    tip.style.top = (above < rect.top - 4 ? top + 14 : above) + 'px';
+  };
+  canvas.onmouseleave = wsHideTooltip;
 }
 
 // ── the compact card under Three Drives ──
@@ -7439,7 +7526,7 @@ function renderSummaryModal(){
     const hasData = trades.some(t => t.result !== 'open');
     document.getElementById('wsModalChartEmpty').style.display = hasData ? 'none' : 'flex';
     if(hasData) wsDrawChart('wsModalCanvas', buckets); else wsClearChart('wsModalCanvas');
-    document.getElementById('wsModalNote').textContent = 'One bar per day, ' + wsRangeLabel(days) + '. Margin per trade: $' + margin.toLocaleString();
+    document.getElementById('wsModalNote').textContent = 'Cumulative P&L, one point per day, ' + wsRangeLabel(days) + '. Margin per trade: $' + margin.toLocaleString();
   } else {
     const now = new Date();
     const target = new Date(now.getFullYear(), now.getMonth() + wsMonthOffset, 1);
@@ -7467,7 +7554,7 @@ function renderSummaryModal(){
     const hasData = monthTrades.some(t => t.result !== 'open');
     document.getElementById('wsModalChartEmpty').style.display = hasData ? 'none' : 'flex';
     if(hasData) wsDrawChart('wsModalCanvas', buckets); else wsClearChart('wsModalCanvas');
-    document.getElementById('wsModalNote').textContent = 'One bar per calendar week of ' + monthLabel + '. Margin per trade: $' + margin.toLocaleString();
+    document.getElementById('wsModalNote').textContent = 'Cumulative P&L, one point per calendar week of ' + monthLabel + '. Margin per trade: $' + margin.toLocaleString();
   }
 }
 // redraw on theme change and resize, same as any canvas chart
@@ -7958,6 +8045,7 @@ document.addEventListener('keydown', function(e){
 
 
 <div class="xo-toasts" id="xoToasts" role="region" aria-live="polite" aria-label="Trend shift notifications"></div>
+<div class="ws-tooltip" id="wsTooltip" role="status"></div>
 
 <!-- ALERTS MODAL -->
 <div class="journal-overlay" id="alertsOverlay" onclick="if(event.target===this)closeAlerts()">
