@@ -46,7 +46,8 @@ A read of the Trading Journal, not a signal: figures and a bar chart for the cur
 
 - **Figures:** trades, win rate (wins / all closed trades, matching the journal's own weekly row), total R, total $ P&L, best and worst trade. $ uses the same margin x leverage x price-move model as Weekly Balance (`jTradePnL`), so the numbers agree with the journal everywhere they're shown.
 - **Chart:** a smooth cumulative-P&L line (Mon-Sun for the week, W1-W5 for the month), with a soft gradient fill down to zero, glow, and dot markers. Green if the range finished at or above zero, red if below. Hover any point for that day's (or week's) running total and its own change.
-- **⤢ expand** opens a bigger view with a **Week / Month** switch and previous/next navigation. Month mode buckets the calendar weeks of the selected month (W1, W2, ...) instead of days, so it stays readable at either scale.
+- **⤢ expand** opens a bigger view with a **Week / Month / All** switch and previous/next navigation (hidden in All, since there's no window to page through). Month mode buckets by calendar week (W1, W2, ...); **All** buckets adaptively — by day up to ~6 weeks of history, by week up to ~10 months, by month beyond that — so the full equity curve stays readable whether you've logged 10 trades or 1,000.
+- **Max drawdown** (peak-to-trough decline in cumulative $, and as a % of that peak) is shown in the expanded view, not the compact card.
 
 ## Top bar
 

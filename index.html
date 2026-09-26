@@ -757,10 +757,10 @@ input.ctrl::placeholder { color: var(--text-3); }
 
 /* ── Weekly Summary (Confluence tab) ── */
 .ws-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); margin-bottom: var(--sp-4); }
-.ws-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.ws-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: var(--sp-3); margin-bottom: var(--sp-4); }
 .ws-stat { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--sp-3); }
 .ws-stat-label { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 1px; color: var(--text-3); text-transform: uppercase; }
-.ws-stat-val { font-family: var(--font-mono); font-size: 1.15rem; font-weight: 800; color: var(--text); margin-top: 3px; }
+.ws-stat-val { font-family: var(--font-mono); font-size: 1.15rem; font-weight: 800; color: var(--text); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: clip; }
 .ws-stat-val.green { color: var(--green); } .ws-stat-val.red { color: var(--red); } .ws-stat-val.amber { color: var(--amber); } .ws-stat-val.blue { color: var(--blue); }
 .ws-stat-sub { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-3); margin-top: 2px; }
 .ws-chart-card { position: relative; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--sp-3) var(--sp-3) var(--sp-2); height: 190px; }
@@ -2962,12 +2962,15 @@ input.ctrl::placeholder { color: var(--text-3); }
         <div class="al-tabs" role="tablist" aria-label="Summary range" style="padding:0;background:none;border-bottom:none">
           <button class="al-tab" role="tab" id="wsModeWeekBtn" type="button" aria-selected="true" onclick="setSummaryMode('week')" style="padding:4px 10px">Week</button>
           <button class="al-tab" role="tab" id="wsModeMonthBtn" type="button" aria-selected="false" onclick="setSummaryMode('month')" style="padding:4px 10px">Month</button>
+          <button class="al-tab" role="tab" id="wsModeAllBtn" type="button" aria-selected="false" onclick="setSummaryMode('all')" style="padding:4px 10px">All</button>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
-        <button class="j-nav-btn" onclick="summaryNav(-1)" aria-label="Previous">‹</button>
-        <div class="journal-week-label" id="wsModalRange" style="min-width:190px"></div>
-        <button class="j-nav-btn" onclick="summaryNav(1)" aria-label="Next">›</button>
+        <span id="wsNav" style="display:flex;align-items:center;gap:8px">
+          <button class="j-nav-btn" onclick="summaryNav(-1)" aria-label="Previous">‹</button>
+          <div class="journal-week-label" id="wsModalRange" style="min-width:190px"></div>
+          <button class="j-nav-btn" onclick="summaryNav(1)" aria-label="Next">›</button>
+        </span>
         <button class="journal-close" onclick="closeSummaryModal()" aria-label="Close">✕</button>
       </div>
     </div>
@@ -7376,37 +7379,62 @@ function calcWeeklyBalance(weekTrades, startingBalance, riskAmount) {
 // (see jTradePnL / calcWeeklyBalance above), so the numbers agree everywhere they're shown.
 // ══════════════════════════════════════════════════════════
 function wsComputeStats(trades, margin){
-  const closed = trades.filter(t => t.result !== 'open');
+  // chronological order matters here: drawdown is peak-to-trough along the equity curve, not a
+  // property of the set of trades — sort by when each was opened, same key calcWeeklyBalance uses.
+  const closed = trades.filter(t => t.result !== 'open').sort((a, b) => (a.openedAt || 0) - (b.openedAt || 0));
   const wins = trades.filter(t => t.result === 'win').length;
   const losses = trades.filter(t => t.result === 'loss').length;
   const bes = trades.filter(t => t.result === 'be').length;
   const open = trades.length - closed.length;
   const winRate = closed.length ? Math.round(wins / closed.length * 100) : null;
   const totalR = trades.filter(t => t.r != null).reduce((a, t) => a + t.r, 0);
-  let totalPnl = 0, best = null, worst = null;
+  let totalPnl = 0, best = null, worst = null, cum = 0, peak = 0, maxDD = 0, maxDDPct = 0;
   closed.forEach(t => {
     const pnl = jTradePnL(t, margin);
     totalPnl += pnl;
     if(best === null || pnl > best.pnl) best = { symbol: t.symbol, pnl };
     if(worst === null || pnl < worst.pnl) worst = { symbol: t.symbol, pnl };
+    cum += pnl;
+    if(cum > peak) peak = cum;
+    const dd = peak - cum;
+    if(dd > maxDD){ maxDD = dd; maxDDPct = peak > 0 ? dd / peak * 100 : 0; }
   });
   return {
     trades: trades.length, closed: closed.length, wins, losses, bes, open, winRate,
     totalR, totalPnl, avgR: closed.length ? totalR / closed.length : null,
-    avgPnl: closed.length ? totalPnl / closed.length : null, best, worst
+    avgPnl: closed.length ? totalPnl / closed.length : null, best, worst,
+    maxDrawdown: closed.length ? maxDD : null, maxDrawdownPct: closed.length && maxDD > 0 ? maxDDPct : null
   };
 }
-function wsStatsHtml(s){
+// The stat boxes are a fixed grid width; a big-enough number (large balances, long strings from
+// heavier funding/fees) can be wider than its box at the default size. Rather than truncate a
+// number that matters, shrink it in 0.05rem steps until it fits, with a readable floor.
+const WS_VAL_MAX_REM = 1.15, WS_VAL_MIN_REM = 0.68, WS_VAL_STEP_REM = 0.05;
+function wsFitStatValues(container){
+  if(!container) return;
+  container.querySelectorAll('.ws-stat-val').forEach(el => {
+    let rem = WS_VAL_MAX_REM;
+    el.style.fontSize = rem + 'rem';
+    while(el.scrollWidth > el.clientWidth && rem > WS_VAL_MIN_REM){
+      rem = Math.max(WS_VAL_MIN_REM, rem - WS_VAL_STEP_REM);
+      el.style.fontSize = rem + 'rem';
+    }
+  });
+}
+function wsStatsHtml(s, opts){
   const r = (v, d) => v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(d);
   const usd = v => v == null ? '—' : (v >= 0 ? '+$' : '−$') + Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
   const cls = v => v == null ? '' : v > 0 ? 'green' : v < 0 ? 'red' : '';
+  const ddCard = (opts && opts.compact) ? '' : `
+    <div class="ws-stat"><div class="ws-stat-label">Max drawdown</div><div class="ws-stat-val ${s.maxDrawdown ? 'red' : ''}">${s.maxDrawdown ? '−' + usd(s.maxDrawdown).slice(1) : '—'}</div><div class="ws-stat-sub">${s.maxDrawdownPct == null ? '' : s.maxDrawdownPct > 0 ? '−' + s.maxDrawdownPct.toFixed(1) + '% from peak' : 'before any gains'}</div></div>`;
   return `
     <div class="ws-stat"><div class="ws-stat-label">Trades</div><div class="ws-stat-val blue">${s.trades}</div>${s.open ? `<div class="ws-stat-sub">${s.open} open</div>` : ''}</div>
     <div class="ws-stat"><div class="ws-stat-label">Win rate</div><div class="ws-stat-val amber">${s.winRate == null ? '—' : s.winRate + '%'}</div><div class="ws-stat-sub">${s.wins}W · ${s.losses}L · ${s.bes}BE</div></div>
     <div class="ws-stat"><div class="ws-stat-label">Total R</div><div class="ws-stat-val ${cls(s.totalR)}">${r(s.totalR, 2)}R</div><div class="ws-stat-sub">avg ${r(s.avgR, 2)}R</div></div>
     <div class="ws-stat"><div class="ws-stat-label">Total P&amp;L</div><div class="ws-stat-val ${cls(s.totalPnl)}">${usd(s.totalPnl)}</div><div class="ws-stat-sub">avg ${usd(s.avgPnl)}</div></div>
     <div class="ws-stat"><div class="ws-stat-label">Best trade</div><div class="ws-stat-val green">${s.best ? usd(s.best.pnl) : '—'}</div><div class="ws-stat-sub">${s.best ? s.best.symbol : ''}</div></div>
-    <div class="ws-stat"><div class="ws-stat-label">Worst trade</div><div class="ws-stat-val red">${s.worst ? usd(s.worst.pnl) : '—'}</div><div class="ws-stat-sub">${s.worst ? s.worst.symbol : ''}</div></div>`;
+    <div class="ws-stat"><div class="ws-stat-label">Worst trade</div><div class="ws-stat-val red">${s.worst ? usd(s.worst.pnl) : '—'}</div><div class="ws-stat-sub">${s.worst ? s.worst.symbol : ''}</div></div>
+    ${ddCard}`;
 }
 // One bar per bucket ({label, pnl}); zero-crossing baseline; green above, red below.
 // Follows the same Canvas 2D + dark/light-aware approach as drawDepthChart above.
@@ -7545,7 +7573,8 @@ function renderWeeklySummary(){
   const margin = (wbLoadSettings().riskAmount != null) ? wbLoadSettings().riskAmount : 300;
   const stats = wsComputeStats(trades, margin);
   document.getElementById('wsRange').textContent = 'This week (' + wsRangeLabel(days) + ') · ' + trades.length + ' trade' + (trades.length === 1 ? '' : 's') + ' logged';
-  el.innerHTML = wsStatsHtml(stats);
+  el.innerHTML = wsStatsHtml(stats, { compact: true });
+  wsFitStatValues(el);
 
   const buckets = days.map(d => {
     const dayTrades = (allData[dateKey(d)] || []).filter(t => t.result !== 'open');
@@ -7557,8 +7586,8 @@ function renderWeeklySummary(){
   if(hasData) wsDrawChart('wsChartCanvas', buckets); else wsClearChart('wsChartCanvas');
 }
 
-// ── the expanded Week/Month modal ──
-let wsMode = 'week';      // 'week' | 'month'
+// ── the expanded Week / Month / All modal ──
+let wsMode = 'week';      // 'week' | 'month' | 'all'
 let wsWeekOffset = 0;     // weeks back from this week (Week mode)
 let wsMonthOffset = 0;    // months back from this month (Month mode)
 function openSummaryModal(){
@@ -7571,23 +7600,77 @@ function closeSummaryModal(){
 }
 function setSummaryMode(mode){
   wsMode = mode;
-  document.getElementById('wsModeWeekBtn').setAttribute('aria-selected', String(mode === 'week'));
-  document.getElementById('wsModeMonthBtn').setAttribute('aria-selected', String(mode === 'month'));
+  ['week','month','all'].forEach(m => document.getElementById('wsMode' + m[0].toUpperCase() + m.slice(1) + 'Btn').setAttribute('aria-selected', String(mode === m)));
+  const nav = document.getElementById('wsNav');
+  if(nav) nav.style.visibility = mode === 'all' ? 'hidden' : 'visible';  // "All" has no window to page through
   renderSummaryModal();
 }
 function summaryNav(dir){
-  if(wsMode === 'week') wsWeekOffset += dir; else wsMonthOffset += dir;
+  if(wsMode === 'week') wsWeekOffset += dir; else if(wsMode === 'month') wsMonthOffset += dir;
   renderSummaryModal();
+}
+// Every trade ever logged, oldest first — the raw material for the All-time equity curve.
+function wsAllTrades(){
+  const allData = jLoad();
+  return Object.keys(allData)
+    .sort()
+    .flatMap(dk => allData[dk])
+    .filter(t => t.result !== 'open')
+    .sort((a, b) => (a.openedAt || 0) - (b.openedAt || 0));
+}
+// Groups a chronological trade list into buckets sized so the chart stays readable regardless of
+// how much history exists: by day up to ~6 weeks, by ISO-ish week up to ~10 months, else by month.
+function wsAdaptiveBuckets(trades, margin){
+  if(!trades.length) return [];
+  const dayMs = 86400000;
+  const span = trades[trades.length - 1].openedAt - trades[0].openedAt;
+  const unit = span <= 42 * dayMs ? 'day' : span <= 305 * dayMs ? 'week' : 'month';
+  const keyOf = (t) => {
+    const d = new Date(t.openedAt || Date.now());
+    if(unit === 'day') return d.toISOString().slice(0, 10);
+    if(unit === 'month') return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    const mon = new Date(d); mon.setDate(d.getDate() - (d.getDay() === 0 ? 6 : d.getDay() - 1));
+    return mon.toISOString().slice(0, 10);       // that week's Monday — sorts correctly as a string
+  };
+  const labelOf = (key) => {
+    if(unit === 'day'){ const d = new Date(key + 'T00:00:00'); return (d.getMonth() + 1) + '/' + d.getDate(); }
+    if(unit === 'month'){ const [y, m] = key.split('-'); return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m - 1] + ' \u2019' + y.slice(2); }
+    const d = new Date(key + 'T00:00:00'); return (d.getMonth() + 1) + '/' + d.getDate();
+  };
+  const buckets = new Map();
+  trades.forEach(t => {
+    const k = keyOf(t);
+    buckets.set(k, (buckets.get(k) || 0) + jTradePnL(t, margin));
+  });
+  return [...buckets.keys()].sort().map(k => ({ label: labelOf(k), pnl: buckets.get(k) }));
 }
 function renderSummaryModal(){
   const allData = jLoad();
   const margin = (wbLoadSettings().riskAmount != null) ? wbLoadSettings().riskAmount : 300;
+
+  if(wsMode === 'all'){
+    const trades = wsAllTrades().concat(Object.values(allData).flat().filter(t => t.result === 'open'));
+    const stats = wsComputeStats(trades, margin);
+    document.getElementById('wsModalRange').textContent = 'All time';
+    document.getElementById('wsModalStats').innerHTML = wsStatsHtml(stats);
+    wsFitStatValues(document.getElementById('wsModalStats'));
+    const closedTrades = wsAllTrades();
+    const buckets = wsAdaptiveBuckets(closedTrades, margin);
+    const hasData = closedTrades.length > 0;
+    document.getElementById('wsModalChartEmpty').style.display = hasData ? 'none' : 'flex';
+    if(hasData) wsDrawChart('wsModalCanvas', buckets); else wsClearChart('wsModalCanvas');
+    document.getElementById('wsModalNote').textContent = hasData
+      ? `Cumulative P&L across every logged trade, ${closedTrades.length} closed since ${new Date(closedTrades[0].openedAt).toLocaleDateString()}. Margin per trade: $${margin.toLocaleString()}`
+      : 'Cumulative P&L across every logged trade. Margin per trade: $' + margin.toLocaleString();
+    return;
+  }
 
   if(wsMode === 'week'){
     const days = getWeekDates(wsWeekOffset);
     const trades = days.flatMap(d => allData[dateKey(d)] || []);
     document.getElementById('wsModalRange').textContent = wsRangeLabel(days);
     document.getElementById('wsModalStats').innerHTML = wsStatsHtml(wsComputeStats(trades, margin));
+    wsFitStatValues(document.getElementById('wsModalStats'));
     const buckets = days.map(d => {
       const dayTrades = (allData[dateKey(d)] || []).filter(t => t.result !== 'open');
       return { label: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][d.getDay() === 0 ? 6 : d.getDay() - 1],
@@ -7617,6 +7700,7 @@ function renderSummaryModal(){
     const monthTrades = weeks.flatMap(w => w.days.filter(d => d.getMonth() === target.getMonth()).flatMap(d => allData[dateKey(d)] || []));
     document.getElementById('wsModalRange').textContent = monthLabel;
     document.getElementById('wsModalStats').innerHTML = wsStatsHtml(wsComputeStats(monthTrades, margin));
+    wsFitStatValues(document.getElementById('wsModalStats'));
     const buckets = weeks.map(w => {
       const wTrades = w.days.filter(d => d.getMonth() === target.getMonth()).flatMap(d => allData[dateKey(d)] || []).filter(t => t.result !== 'open');
       return { label: w.label, pnl: wTrades.reduce((a, t) => a + jTradePnL(t, margin), 0) };
@@ -7628,9 +7712,13 @@ function renderSummaryModal(){
   }
 }
 // redraw on theme change and resize, same as any canvas chart
+let wsResizeTimer = null;
 window.addEventListener('resize', () => {
-  if(currentView === 'confluence') renderWeeklySummary();
-  if(document.getElementById('summaryOverlay')?.classList.contains('open')) renderSummaryModal();
+  clearTimeout(wsResizeTimer);
+  wsResizeTimer = setTimeout(() => {
+    if(currentView === 'confluence') renderWeeklySummary();
+    if(document.getElementById('summaryOverlay')?.classList.contains('open')) renderSummaryModal();
+  }, 120);
 });
 
 // Remember the leverage you actually use — the form used to snap back to 10 after every save.
