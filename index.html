@@ -1894,9 +1894,10 @@ input.ctrl::placeholder { color: var(--text-3); }
 }
 .wb-settings-toggle:hover { color: var(--blue); }
 .wb-settings {
-  display: flex; gap: var(--sp-3); margin-bottom: var(--sp-3);
+  display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-bottom: var(--sp-3);
   padding-bottom: var(--sp-3); border-bottom: 1px dashed var(--border2);
 }
+.wb-settings .form-group { flex: 1 1 150px; min-width: 130px; }
 .wb-figures { display: flex; gap: var(--sp-5); flex-wrap: wrap; }
 .wb-figure { display: flex; flex-direction: column; gap: 2px; }
 .wb-label { font-family: var(--font-mono); font-size: 0.55rem; color: var(--text-3); letter-spacing: 0.5px; text-transform: uppercase; }
@@ -4245,10 +4246,14 @@ function getConfluenceBadgeHTML(token) {
 function exportJournal(){
   const data = JSON.parse(localStorage.getItem('3drive_journal_v1')||'{}');
   const margin = (() => { try { const w = JSON.parse(localStorage.getItem('3drive_weekly_balance_v1')||'{}'); return w.riskAmount != null ? w.riskAmount : 300; } catch(e){ return 300; } })();
-  const rows = [['Date','Symbol','Direction','Timeframe','Leverage','Entry','SL','Exit','Result','R','PnL_USD','Setup','Score','Notes']];
+  const rows = [['Date','Symbol','Direction','Timeframe','Leverage','Entry','SL','Exit','Result','R','Fee_USD','Funding_USD','PnL_USD','Setup','Score','Notes']];
   Object.entries(data).sort().forEach(([date, trades]) => {
     trades.forEach(t => {
-      rows.push([date, t.symbol, t.dir, t.tf, t.leverage||'', t.entry, t.sl, t.exit||'', t.result, t.r??'', (t.result!=='open' && t.r!=null) ? Math.round(jTradePnL(t, margin)*100)/100 : '', t.setup||'', t.score??'', t.notes||'']);
+      const closed = t.result!=='open' && t.r!=null;
+      rows.push([date, t.symbol, t.dir, t.tf, t.leverage||'', t.entry, t.sl, t.exit||'', t.result, t.r??'',
+        closed ? -Math.round(jTradeFee(t, margin)*100)/100 : '',
+        closed ? Math.round((t.funding||0)*100)/100 : '',
+        closed ? Math.round(jTradePnL(t, margin)*100)/100 : '', t.setup||'', t.score??'', t.notes||'']);
     });
   });
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -6761,12 +6766,33 @@ function jBlendedMovePct(trade, finalExitPrice) {
 //   P&L = margin × leverage × price move %      (floored at −margin — isolated margin can't lose more)
 // e.g. $300 margin × 14x on a +4.58% move = +$192. NOT margin × R: R measures the move against
 // the stop-loss distance, and only equals a dollar figure if the margin is what you lose at the SL.
+// Dollar P&L INCLUDING costs: the price-move P&L above, minus a round-trip taker fee (entry +
+// exit, on notional, at the current fee-rate setting — same "current setting applies to every
+// trade retroactively" behaviour margin already has), plus whatever funding was recorded on the
+// trade itself (trade.funding: a signed dollar figure, positive = you received it, negative =
+// you paid it — entered per trade in the journal form, since funding actually charged depends on
+// how long a position was held and isn't something this app can reconstruct after the fact).
 function jTradePnL(trade, margin) {
   if(!trade || trade.result === 'open' || trade.r == null) return 0;
   const pct = jBlendedMovePct(trade, trade.exit);
   if(pct === null) return 0;
   const lev = Math.max(1, parseFloat(trade.leverage) || 1);
+  const gross = Math.max(margin * lev * pct, -margin);
+  const fee = margin * lev * (wbFeeRatePct() / 100) * 2;
+  const funding = typeof trade.funding === 'number' ? trade.funding : 0;
+  return gross - fee + funding;
+}
+// Gross P&L, no costs — used only where the distinction matters (the trade card's cost breakdown).
+function jTradePnLGross(trade, margin) {
+  if(!trade || trade.result === 'open' || trade.r == null) return 0;
+  const pct = jBlendedMovePct(trade, trade.exit);
+  if(pct === null) return 0;
+  const lev = Math.max(1, parseFloat(trade.leverage) || 1);
   return Math.max(margin * lev * pct, -margin);
+}
+function jTradeFee(trade, margin){
+  const lev = Math.max(1, parseFloat(trade?.leverage) || 1);
+  return margin * lev * (wbFeeRatePct() / 100) * 2;
 }
 function fmtUsdSigned(v, digits) {
   const d = digits == null ? 2 : digits;
@@ -7050,9 +7076,12 @@ function renderJournalDay(days) {
         const r = t.r !== null ? t.r : '—';
         const rClass = t.r > 0 ? 'pos' : t.r < 0 ? 'neg' : 'zero';
         const rLabel = t.r !== null ? (t.r >= 0 ? '+'+t.r+'R' : t.r+'R') : '—';
-        const cardPnl = (t.r !== null && t.result !== 'open')
-          ? jTradePnL(t, (wbLoadSettings().riskAmount != null ? wbLoadSettings().riskAmount : 300)) : null;
-        const pnlLabel = cardPnl === null ? '' : ` <span style="font-size:0.7rem;font-weight:600;opacity:0.85">${fmtUsdSigned(cardPnl)}</span>`;
+        const cardMargin = (wbLoadSettings().riskAmount != null ? wbLoadSettings().riskAmount : 300);
+        const cardPnl = (t.r !== null && t.result !== 'open') ? jTradePnL(t, cardMargin) : null;
+        const cardFee = cardPnl === null ? 0 : jTradeFee(t, cardMargin);
+        const cardFunding = t.funding || 0;
+        const costTitle = cardPnl === null ? '' : ` title="fee -${fmtUsdSigned(cardFee).replace('+','')}${cardFunding ? ', funding ' + fmtUsdSigned(cardFunding) : ''}"`;
+        const pnlLabel = cardPnl === null ? '' : ` <span style="font-size:0.7rem;font-weight:600;opacity:0.85"${costTitle}>${fmtUsdSigned(cardPnl)}</span>`;
         const isOpen = t.result === 'open';
         const resultClass = isOpen ? 'be' : t.result==='win'?'win':t.result==='loss'?'loss':'be';
         const resultLabel = isOpen ? 'OPEN' : t.result==='win'?'WIN':t.result==='loss'?'LOSS':'BE';
@@ -7154,6 +7183,10 @@ function renderJournalDay(days) {
               <option value="open">Open</option>
             </select>
           </div>
+          <div class="form-group">
+            <label class="form-label" for="jFunding" title="What your exchange actually charged or paid you in funding for this position. A suggestion is filled in from the Weekly Balance settings, but this app has no way to know your real holding time — check your exchange and correct it.">Funding ($, optional)</label>
+            <input class="form-input" id="jFunding" type="number" step="any" placeholder="0.00" oninput="jFundingTouched=true">
+          </div>
         </div>
         <!-- Position size calculator — uses the same fixed $ risk you've already set in
              Weekly Balance, so there's one risk number for the whole app, not two that can
@@ -7182,6 +7215,9 @@ function renderJournalDay(days) {
   const wbSettings = wbLoadSettings();
   const wbStart = wbSettings.startingBalance != null ? wbSettings.startingBalance : 1000;
   const wbRiskAmount = wbSettings.riskAmount != null ? wbSettings.riskAmount : 300;
+  const wbFeeRate = wbFeeRatePct();
+  const wbFundingRate = wbFundingRatePct();
+  const wbFundingPeriodsVal = wbFundingPeriods();
   const wb = calcWeeklyBalance(weekTrades, wbStart, wbRiskAmount);
   const wbChangeStr = (wb.currentBalance>=wbStart?'+':'') + (wb.currentBalance-wbStart).toLocaleString(undefined,{maximumFractionDigits:2});
   const wbColor = wb.currentBalance>wbStart?'var(--green)':wb.currentBalance<wbStart?'var(--red)':'var(--text-2)';
@@ -7204,6 +7240,18 @@ function renderJournalDay(days) {
         <div class="form-group">
           <label class="form-label" for="wbRiskInput">Fixed margin per trade ($)</label>
           <input class="form-input" id="wbRiskInput" type="number" step="any" value="${wbRiskAmount}" onchange="jSaveWbSettings()">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="wbFeeInput" title="Round-trip taker fee, charged on notional (margin x leverage) at both entry and exit. Applied to every trade automatically.">Fee rate (% per side, round-trip x2)</label>
+          <input class="form-input" id="wbFeeInput" type="number" step="any" min="0" value="${wbFeeRate}" onchange="jSaveWbSettings()">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="wbFundingRateInput" title="Used only to SUGGEST a starting value in the Funding field when you log a trade — never applied automatically. Positive = you typically pay (longs in positive funding); negative = you typically receive.">Assumed funding rate (% per period)</label>
+          <input class="form-input" id="wbFundingRateInput" type="number" step="any" value="${wbFundingRate}" onchange="jSaveWbSettings()">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="wbFundingPeriodsInput" title="How many funding periods (usually 8h each) the suggestion assumes a position is held for.">Assumed funding periods held</label>
+          <input class="form-input" id="wbFundingPeriodsInput" type="number" step="any" min="0" value="${wbFundingPeriodsVal}" onchange="jSaveWbSettings()">
         </div>
       </div>
       <div class="wb-figures">
@@ -7253,11 +7301,20 @@ function jJumpToWbSettings() {
 function jSaveWbSettings() {
   const startEl = document.getElementById('wbStartInput');
   const riskEl = document.getElementById('wbRiskInput');
+  const feeEl = document.getElementById('wbFeeInput');
+  const fRateEl = document.getElementById('wbFundingRateInput');
+  const fPeriodsEl = document.getElementById('wbFundingPeriodsInput');
   const start = parseFloat(startEl.value);
   const risk = parseFloat(riskEl.value);
+  const fee = parseFloat(feeEl?.value);
+  const fRate = parseFloat(fRateEl?.value);
+  const fPeriods = parseFloat(fPeriodsEl?.value);
   wbSaveSettings({
     startingBalance: isNaN(start) ? 1000 : start,
-    riskAmount: isNaN(risk) ? 300 : risk
+    riskAmount: isNaN(risk) ? 300 : risk,
+    feeRatePct: isNaN(fee) || fee < 0 ? 0.05 : fee,
+    fundingRatePct: isNaN(fRate) ? 0.01 : fRate,
+    fundingPeriods: isNaN(fPeriods) || fPeriods < 0 ? 1 : fPeriods
   });
   renderJournalWeek();
 }
@@ -7274,6 +7331,19 @@ function wbLoadSettings() {
 }
 function wbSaveSettings(s) {
   try { localStorage.setItem(WEEKLY_BALANCE_KEY, JSON.stringify(s)); } catch(e){}
+}
+// Fee/funding defaults — same "read a global setting fresh each time" pattern as margin/leverage
+// above, so changing the rate later applies to every trade's $ figure everywhere it's shown,
+// exactly like changing the margin already does.
+function wbFeeRatePct(){ const v = wbLoadSettings().feeRatePct; return typeof v === 'number' && v >= 0 ? v : 0.05; }
+function wbFundingRatePct(){ const v = wbLoadSettings().fundingRatePct; return typeof v === 'number' ? v : 0.01; }
+function wbFundingPeriods(){ const v = wbLoadSettings().fundingPeriods; return typeof v === 'number' && v >= 0 ? v : 1; }
+// The funding suggestion offered in the trade form: notional x rate x periods, signed so a long
+// pays when the rate is positive (the standard perp convention) and a short receives it.
+function wbFundingSuggestion(margin, leverage, dir){
+  const notional = margin * Math.max(1, leverage || 1);
+  const signed = (wbFundingRatePct() / 100) * wbFundingPeriods() * (dir === 'long' ? -1 : 1);
+  return notional * signed;
 }
 function calcWeeklyBalance(weekTrades, startingBalance, riskAmount) {
   const sorted = [...weekTrades].sort((a,b) => (a.openedAt||0) - (b.openedAt||0));
@@ -7569,7 +7639,9 @@ function jLastLeverage(){
   try { const v = parseFloat(localStorage.getItem(J_LEV_KEY)); return v >= 1 && v <= 100 ? v : 10; } catch(e){ return 10; }
 }
 
+let jFundingTouched = false;
 function jToggleForm() {
+  jFundingTouched = false;
   const f = document.getElementById('addTradeForm');
   f.classList.toggle('open');
   if(f.classList.contains('open')){
@@ -7596,6 +7668,10 @@ function jUpdatePosCalc() {
   const margin = wbSettings.riskAmount != null ? wbSettings.riskAmount : 300;
   const leverage = Math.max(1, Math.min(100, parseFloat(document.getElementById('jLeverage')?.value) || 1));
   const dir = document.getElementById('jDir')?.value || 'long';
+  const notionalAll = margin * leverage;
+  const feeCost = notionalAll * (wbFeeRatePct() / 100) * 2;
+  const fundingInput = document.getElementById('jFunding');
+  if(fundingInput && !jFundingTouched) fundingInput.value = wbFundingSuggestion(margin, leverage, dir).toFixed(2);
 
   if(riskLineEl){
     riskLineEl.innerHTML = `Using fixed margin: <b>$${margin.toLocaleString(undefined,{maximumFractionDigits:2})}</b> (isolated) at <b>${leverage}x</b> leverage <span class="pos-calc-risk-edit" onclick="jJumpToWbSettings()">(change margin in Weekly Balance ⚙)</span>`;
@@ -7634,6 +7710,7 @@ function jUpdatePosCalc() {
     <div class="pos-calc-row"><span>Position size</span><b>${units.toLocaleString(undefined,{maximumFractionDigits:6})} units</b></div>
     <div class="pos-calc-row"><span>Est. liquidation price</span><b>$${liqPrice.toLocaleString(undefined,{maximumFractionDigits:6})}</b></div>
     <div class="pos-calc-row"><span>$ loss if SL hit</span><b>$${cappedLoss.toLocaleString(undefined,{maximumFractionDigits:2})}${dollarLossAtSL>margin?' (capped by margin)':''}</b></div>
+    <div class="pos-calc-row"><span>Round-trip fee (${wbFeeRatePct()}% x 2)</span><b>−$${feeCost.toLocaleString(undefined,{maximumFractionDigits:2})}</b></div>
     ${warningHTML}
     <div class="pos-calc-note">Liquidation price is an estimate (~${(DEFAULT_MMR*100).toFixed(1)}% maintenance margin assumed) — always confirm the exact figure on your exchange before entering.</div>`;
 }
@@ -7649,6 +7726,8 @@ function jSaveTrade(dateKey) {
   const tp      = document.getElementById('jTp').value;
   const exit    = document.getElementById('jExit').value;
   const result  = document.getElementById('jResult').value;
+  const fundingRaw = document.getElementById('jFunding').value;
+  const funding = fundingRaw === '' ? 0 : (parseFloat(fundingRaw) || 0);
   const notes   = document.getElementById('jNotes').value.trim();
 
   if(!symbol||!entry||!sl) {
@@ -7661,7 +7740,7 @@ function jSaveTrade(dateKey) {
   const now = new Date();
   const trade = {
     id: 't_'+now.getTime()+'_'+Math.random().toString(36).slice(2,8),
-    symbol, dir, tf, entry, sl, leverage,
+    symbol, dir, tf, entry, sl, leverage, funding,
     tp:         tp||null,
     slHistory:  [{ time: now.toISOString(), sl }],
     scaleOuts:  [],
@@ -7679,10 +7758,11 @@ function jSaveTrade(dateKey) {
   jSave(data);
 
   // Reset form
-  ['jToken','jEntry','jSl','jTp','jExit','jNotes'].forEach(id => {
+  ['jToken','jEntry','jSl','jTp','jExit','jFunding','jNotes'].forEach(id => {
     const el = document.getElementById(id);
     el.value=''; el.style.borderColor='';
   });
+  jFundingTouched = false;
   try { localStorage.setItem(J_LEV_KEY, String(leverage)); } catch(e){}
   document.getElementById('jLeverage').value = String(jLastLeverage()); // your last leverage, not a hard-coded 10
   document.getElementById('addTradeForm').classList.remove('open');

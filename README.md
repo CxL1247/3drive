@@ -26,6 +26,16 @@ Real resting bid/ask depth per token — not leveraged positions, not predicted 
 ### Token Search
 Search any scanned token to open a floating popup combining Pattern, RSI, Range, and Order Book data for that one token in one place. Minimize to a summary pill, maximize to a larger panel, or close — price ticks live while open.
 
+## Fees and funding
+
+Dollar P&L (journal, Weekly Balance, Weekly Summary, CSV, the trade card) now includes real costs, not just the raw price move:
+
+- **Fees:** a round-trip taker fee (entry + exit) on notional (margin x leverage), at a **Fee rate** you set in Weekly Balance -> the gear icon (default 0.05% per side). Applied automatically to every trade, using the current setting — like margin, changing the rate later changes every trade's $ figure retroactively.
+- **Funding:** entered manually per trade, in the journal form's **Funding ($, optional)** field, since the app has no way to know how long a position was actually held or what the exchange really charged. A suggestion is pre-filled from **Assumed funding rate** and **Assumed funding periods** (also in Weekly Balance settings) — notional x rate x periods, signed so a long pays when the rate is positive and a short receives it — but it's a starting guess, not a fetch: check your exchange and correct it. Editing the field once stops it from being overwritten by further suggestions on that trade.
+- The trade card's $ figure has a hover tooltip breaking out the fee and funding that went into it.
+
+## Confluence tab
+
 ## Confluence tab
 
 Two sections: **Three Drives** (the classic harmonic pattern signals, unrelated to anything below) and **Weekly Summary**. The standalone RSI + Order Book + Trend confluence scoring engine has been retired — the tab now pairs pattern signals with a read of your own trading, not a second signal generator.
