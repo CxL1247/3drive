@@ -209,4 +209,31 @@ No framework and no install — plain Node:
 node test/detectors.js    # detection math
 node test/signals.js      # signals endpoint
 node test/security.js     # proxy allowlist + alert hardening
+node test/backtest-xo.js  # the Trader XO edge lab below (offline — no network)
 ```
+
+## Trader XO edge lab
+
+`scripts/backtest-xo.js` is a standalone backtest for the Trader XO arrow, run **locally** on
+your own machine (this repo's own dev/CI sandbox can't reach Binance):
+
+```
+node scripts/backtest-xo.js --symbol BTCUSDT --interval 1h --days 365
+node scripts/backtest-xo.js --symbol ETHUSDT --interval 4h --days 730 --market spot
+node scripts/backtest-xo.js --symbol SOLUSDT --interval 1h --days 180 --stopPct 1.5 --r 2 --out sol-1h.csv
+```
+
+It downloads real historical candles from Binance's public API, finds **every** arrow across
+that history using `calcEMA` straight from `src/detectors.js` (zero drift from what the app
+itself runs — `detectTraderXO` only ever reports the *latest* arrow, which is right for a live
+app but useless for a backtest), and reports:
+
+- **Forward return** at 1/5/10/20 bars after each arrow — does price actually keep moving the
+  arrow's way, on average?
+- **A simple fixed-stop / fixed-target simulation** (your `--stopPct` / `--r`) — win rate and
+  expectancy in R if you mechanically traded every arrow.
+- The same two, **split by XO's own "choppy" flag** (`XO_CHOP_WINDOW`/`XO_CHOP_FLIPS`) — the one
+  filter the live app already offers, so it's worth checking whether it actually helps.
+- **Bull vs Bear**, split throughout, since a trend detector often behaves very differently long vs short.
+
+Pass `--out results.csv` to get every arrow and its outcome as a CSV, for the tool doing the same job the journal's own P&L math does. This is a mechanical simulation for research, not a full backtest engine — no fees, funding, or slippage (see the journal's own Fee/Funding settings for what those cost in this app), one position at a time, and a same-candle stop+target hit is scored as the stop (worst case, since intra-candle order isn't knowable from OHLC alone). It answers "does this signal have any edge at all", not "what would I have made".
