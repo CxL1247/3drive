@@ -26,6 +26,15 @@ Real resting bid/ask depth per token — not leveraged positions, not predicted 
 ### Token Search
 Search any scanned token to open a floating popup combining Pattern, RSI, Range, and Order Book data for that one token in one place. Minimize to a summary pill, maximize to a larger panel, or close — price ticks live while open.
 
+## Logging a trade
+
+The journal's **+ log trade** form is built to be quick rather than a wall of textboxes:
+
+- **Direction** is a Long / Short toggle, **Timeframe** is a row of chips, and **Leverage** is a slider (with one-click presets) instead of typed numbers.
+- **Result is automatic.** Leave *Exit Price* blank and the trade is **Open**; enter one and the same R the journal already computes decides **Win / Loss / Break-even** live, shown as a badge. There's no Result dropdown to get out of sync with the prices you entered. If your stop sits on the wrong side of entry for the chosen direction, the form won't guess and won't save it until it's fixed.
+- **live** buttons next to Entry and Exit fill in the token's last scanned price (needs a scan to have run and the token to be in it).
+- **Take Profit** and **Funding** live under *Target & funding (optional)*, closed by default. Funding's suggested value only appears once you open that section, so a trade logged without touching it carries no hidden funding estimate.
+
 ## Fees and funding
 
 Dollar P&L (journal, Weekly Balance, Weekly Summary, CSV, the trade card) now includes real costs, not just the raw price move:
