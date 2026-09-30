@@ -219,6 +219,7 @@ node test/detectors.js    # detection math
 node test/signals.js      # signals endpoint
 node test/security.js     # proxy allowlist + alert hardening
 node test/backtest-xo.js  # the Trader XO edge lab below (offline — no network)
+node test/backtest-donchian.js  # the Donchian breakout edge lab (offline — no network)
 ```
 
 ## Trader XO edge lab
@@ -246,3 +247,38 @@ app but useless for a backtest), and reports:
 - **Bull vs Bear**, split throughout, since a trend detector often behaves very differently long vs short.
 
 Pass `--out results.csv` to get every arrow and its outcome as a CSV, for the tool doing the same job the journal's own P&L math does. This is a mechanical simulation for research, not a full backtest engine — no fees, funding, or slippage (see the journal's own Fee/Funding settings for what those cost in this app), one position at a time, and a same-candle stop+target hit is scored as the stop (worst case, since intra-candle order isn't knowable from OHLC alone). It answers "does this signal have any edge at all", not "what would I have made".
+
+## Donchian breakout edge lab
+
+`scripts/backtest-donchian.js` tests a channel breakout (a candle closes beyond the highest high
+/ lowest low of the prior N candles) across **many coins at once**, run **locally** because this
+repo's sandbox can't reach Binance. It exists to answer one question before any alert is built:
+*does this rule still have an edge after fees, slippage and funding?*
+
+```
+node scripts/backtest-donchian.js --symbols BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT --interval 4h --days 730
+node scripts/backtest-donchian.js --symbols BTCUSDT,ETHUSDT,SOLUSDT --interval 1d --days 1460 --entry 20,55 --exit 10,20
+node scripts/backtest-donchian.js --symbols BTCUSDT,ETHUSDT,SOLUSDT --out donchian-trades.csv
+```
+
+How it is built, and what to read in the output:
+
+- **1R is an ATR stop** (`--atrMult` x ATR at entry), not a fixed percentage, and the stop is checked
+  intrabar with gap-aware fills. Exit is the stop or a close back through the prior `--exit`-candle channel.
+- **Costs are charged in R** (`--fee`, `--slip`, `--funding`): round-trip cost divided by the stop
+  distance, so a tight stop visibly makes fees expensive. Slippage (0.02%) and funding (0.01% / 8h) are
+  assumptions; change them to match what you actually pay.
+- **Splits, not a verdict:** long vs short, BTC daily trend (EMA 12/50) aligned vs against, breakout
+  volume confirmed vs not, and whether the app's own BB squeeze rule was active just before the
+  breakout. Every split uses only information available at the breakout candle's close.
+- **Robustness:** first half vs second half of the data, a per-coin table, and a parameter sweep
+  (`--entry 10,20,55`). Prefer settings whose neighbours also look fine; the single best cell is usually luck.
+- **Stop distance vs your leverage:** how often the stop is wider than half the liquidation distance at
+  `--lev` (default 14x), and the leverage that would keep liquidation twice as far as the stop.
+
+Limits worth remembering: coins move together, so pooled trades are not independent and the t-stat is
+generous; entries and exits are at candle closes with no order-book model; and win rate is the wrong
+number to judge a breakout system by (they win roughly a third of the time). The offline tests prove
+the *mechanics* (no look-ahead, correct fills, correct cost math, squeeze parity with `calcBBSqueeze`)
+and that the lab rejects a random walk while detecting real momentum. They cannot prove the rule works
+on real markets. Only running it against real candles can.
