@@ -3622,7 +3622,11 @@ async function fetchTopTokens(n) {
       const data = await r.json();
       if(data.included && data.included.length > 0){
         tokens = data.included;
-        log(`${tokens.length} tokens loaded ✓ (ranked by market cap)`,'ok');
+        if(data.degraded){
+          log(`${tokens.length} tokens loaded — CoinGecko unavailable, ${data.degraded==='stale-market-cap-list'?'using the last good market-cap list':'ranked by exchange volume instead of market cap'}`,'warn');
+        } else {
+          log(`${tokens.length} tokens loaded ✓ (ranked by market cap)`,'ok');
+        }
 
         // Transparent skip log — every top-100-by-market-cap token that didn't make it in,
         // and exactly why, so a token never just silently disappears with no explanation.
@@ -3660,6 +3664,26 @@ async function fetchTopTokens(n) {
     _tokenCache = merged; _tokenCacheTime = now;
     return merged;
   }
+
+  // Top-100 endpoint is down: live exchange tickers still carry real prices, so use them
+  // before resorting to the hardcoded list (which has no prices at all).
+  try {
+    const r = await serverFetch({ action:'tickers', n }, 20000);
+    if(r.ok){
+      const arr = await r.json();
+      if(Array.isArray(arr) && arr.length){
+        log(`Top-100 unavailable — using ${arr.length} live exchange tickers ranked by volume`,'warn');
+        const merged = arr.slice(0,n).map((t,i)=>({
+          rank:i+1, symbol:t.symbol, name:t.symbol, price:t.price,
+          change24h:t.change24h||0, volume:t.volume, marketCap:null, icon:null,
+          productId:t.symbol+'-USD',
+          patterns:{'SIX_HOUR':null,'ONE_HOUR':null,'THIRTY_MINUTE':null},
+          squeeze:{'SIX_HOUR':null,'ONE_HOUR':null,'THIRTY_MINUTE':null}
+        }));
+        return merged;   // deliberately not cached, so the next scan retries the real list
+      }
+    }
+  } catch(e){ /* fall through to the hardcoded list */ }
 
   log('All token sources failed — using hardcoded list','err');
   return getFallback(n);
@@ -6113,6 +6137,9 @@ async function scanOrderbooks(tokens){
 
   async function pull(token){
     try {
+      // No usable price means no ±3% band: with price 0 the ask side sums to nothing and every
+      // token would read as +100% bid. Skip it instead of showing a fabricated imbalance.
+      if(!(token.price > 0)){ done++; if(fill) fill.style.width = (done/tokens.length*100)+'%'; return; }
       const data = await fetchOrderbook(token.symbol);
       if(data && data.bids && data.bids.length && data.asks && data.asks.length){
         const price = token.price;

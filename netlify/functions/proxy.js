@@ -260,14 +260,32 @@ async function fetchTickers(n) {
 // place. Not every top-100-by-market-cap token has a KuCoin/OKX USDT pair, so we walk further
 // down CoinGecko's ranked list than 100 and backfill until we actually have 100 tradeable ones,
 // reporting exactly which ones got skipped and why rather than silently coming up short.
+// CoinGecko's free tier rate-limits shared serverless IPs, so it is treated as a best-effort
+// source, not a hard dependency: retry once, then reuse the last good market-cap list (prices are
+// always re-read from the exchanges), then fall back to ranking by exchange volume. A degraded
+// result is flagged so the client can say so, and is cached only briefly so it recovers quickly.
+let lastGoodCoins = null;
+const CG_URL = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1&sparkline=false';
+
 async function fetchTop100ByMarketCap(n) {
-  const [cg, ku, okx] = await Promise.all([
-    tryFetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=200&page=1&sparkline=false', 'coingecko-markets'),
+  const [cg0, ku, okx] = await Promise.all([
+    tryFetch(CG_URL, 'coingecko-markets'),
     tryFetch('https://api.kucoin.com/api/v1/market/allTickers', 'kucoin-tickers-for-top100'),
     tryFetch('https://www.okx.com/api/v5/market/tickers?instType=SPOT', 'okx-tickers-for-top100'),
   ]);
-
-  if (!Array.isArray(cg) || !cg.length) return { included: [], skipped: [], error: 'CoinGecko market data unavailable' };
+  let cg = cg0;
+  if (!Array.isArray(cg) || !cg.length) {
+    await new Promise(r => setTimeout(r, 800));
+    cg = await tryFetch(CG_URL, 'coingecko-markets-retry');
+  }
+  let degraded = null;
+  if (Array.isArray(cg) && cg.length) {
+    lastGoodCoins = cg.map(c => ({ symbol:c.symbol, name:c.name, market_cap_rank:c.market_cap_rank, market_cap:c.market_cap, image:c.image }));
+  } else if (lastGoodCoins) {
+    cg = lastGoodCoins; degraded = 'stale-market-cap-list';
+  } else {
+    degraded = 'exchange-volume-ranking';   // list is filled from the exchange tickers just below
+  }
 
   // Build a map of symbol -> { price, volume, source } from whichever exchanges responded
   const exchangeMap = {};
@@ -283,6 +301,13 @@ async function fetchTop100ByMarketCap(n) {
       if (!exchangeMap[sym] && +t.last > 0) exchangeMap[sym] = { price:+t.last, change24h:0, volume:+t.volCcy24h||0, source:'okx' };
     });
   }
+
+  if (!Array.isArray(cg) || !cg.length) {
+    cg = Object.entries(exchangeMap)
+      .sort((a, b) => b[1].volume - a[1].volume)
+      .map(([sym]) => ({ symbol:sym.toLowerCase(), name:sym, market_cap_rank:null, market_cap:null, image:null }));
+  }
+  if (!cg.length) return { included: [], skipped: [], error: 'CoinGecko and exchange ticker data both unavailable' };
 
   const included = [];
   const skipped = [];
@@ -302,7 +327,7 @@ async function fetchTop100ByMarketCap(n) {
     });
   }
 
-  return { included, skipped };
+  return degraded ? { included, skipped, degraded } : { included, skipped };
 }
 
 // ── LEGACY: ?url= passthrough for CoinGecko / calendar ──
@@ -417,7 +442,7 @@ exports.handler = async function(event) {
     if (cached) return { statusCode:200, headers:CORS, body:JSON.stringify(cached) };
     const data = await fetchTop100ByMarketCap(n);
     if (data.error) return { statusCode:502, headers:CORS, body:JSON.stringify(data) };
-    cacheSet(key, data, CACHE_TTL_MS.top100);
+    cacheSet(key, data, data.degraded ? 30_000 : CACHE_TTL_MS.top100);
     return { statusCode:200, headers:CORS, body:JSON.stringify(data) };
   }
 
