@@ -31,9 +31,20 @@ Search any scanned token to open a floating popup combining Pattern, RSI, Range,
 The journal's **+ log trade** form is built to be quick rather than a wall of textboxes:
 
 - **Direction** is a Long / Short toggle, **Timeframe** is a row of chips, and **Leverage** is a slider (with one-click presets) instead of typed numbers.
-- **Result is automatic.** Leave *Exit Price* blank and the trade is **Open**; enter one and the same R the journal already computes decides **Win / Loss / Break-even** live, shown as a badge. There's no Result dropdown to get out of sync with the prices you entered. If your stop sits on the wrong side of entry for the chosen direction, the form won't guess and won't save it until it's fixed.
-- **live** buttons next to Entry and Exit fill in the token's last scanned price (needs a scan to have run and the token to be in it).
-- **Take Profit** and **Funding** live under *Target & funding (optional)*, closed by default. Funding's suggested value only appears once you open that section, so a trade logged without touching it carries no hidden funding estimate.
+- **Result is automatic.** Leave *Exit* blank and the trade is **Open**; enter one and the same R the journal already computes decides **Win / Loss / Break-even** live, shown as a badge. There's no Result dropdown to get out of sync with the prices you entered. If your stop **or take profit** sits on the wrong side of entry for the chosen direction, the form says so next to the Save button, marks the field, and won't save it until it's fixed (a wrong-side level would otherwise auto-close the trade instantly).
+- **Prices are one aligned row:** Entry, Stop loss, **Take profit** and Exit are four equal fields (two rows of two on a phone), so Take Profit is always visible, not tucked away.
+- **live** buttons inside the Entry and Exit fields fill in the token's last scanned price (needs a scan to have run and the token to be in it).
+- **Funding** lives under *Funding (optional)*, closed by default. Its suggested value only appears once you open that section, so a trade logged without touching it carries no hidden funding estimate.
+- The **position size calculator** also reads Take Profit: it shows the profit if the target is hit (after the round-trip fee, same model as the journal's P&L) and the reward : risk against your stop.
+
+### Editing a logged trade
+
+Every trade card has a **✎ edit** button (next to ✕ delete). It swaps that card for the same form, pre-filled, right where the card was.
+
+- You can change token, direction, timeframe, leverage, entry, stop loss, take profit, exit, funding and notes. Result and R are recomputed live, using the same maths as when logging (including any scale-outs).
+- **Stop loss shows the *original* stop**, since that is what R is measured against. If you moved it with *Adjust SL*, the form says so and leaves the current stop where it is. Scale-outs and stop history are never touched by the form.
+- Blanking *Exit* **re-opens** a closed trade (it counts as open from that moment, so auto-resolve doesn't instantly re-close it on the levels you just left). Changing a trade's levels or outcome by hand removes its **AUTO** tag; editing only the notes keeps it.
+- If a scan closes the trade while you're editing it, saving asks before overwriting. Whatever you've typed survives a refresh of the journal. **Esc** cancels the edit; leaving the day or closing the journal does too.
 
 ## Fees and funding
 
@@ -220,6 +231,7 @@ node test/signals.js      # signals endpoint
 node test/security.js     # proxy allowlist + alert hardening
 node test/backtest-xo.js  # the Trader XO edge lab below (offline — no network)
 node test/backtest-donchian.js  # the Donchian breakout edge lab (offline — no network)
+node test/journal-edit.js # journal validation + edit rules (src/journal-edit.js)
 ```
 
 ## Trader XO edge lab

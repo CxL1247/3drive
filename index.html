@@ -1773,13 +1773,20 @@ input.ctrl::placeholder { color: var(--text-3); }
 }
 .trade-action-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-dim); }
 .trade-action-btn.close:hover { border-color: var(--green); color: var(--green); background: var(--green-dim); }
-.trade-delete {
-  position: absolute; top: var(--sp-2); right: var(--sp-2);
-  background: none; border: none; color: var(--text-3);
-  cursor: pointer; font-size: 0.75rem; padding: 3px 6px;
-  border-radius: var(--r-sm); transition: all var(--t-fast);
+/* Edit + delete live IN the header row, after the result — never absolutely positioned, so they
+   can't sit on top of the R / P&L figure no matter how long it gets or how the row wraps. */
+.trade-card-right { margin-left: auto; display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0; }
+.trade-card-right .trade-r { margin-left: 0; }   /* the cluster is what's pushed right, so result + tools stay together when the row wraps */
+.trade-tools { display: flex; gap: 4px; flex-shrink: 0; align-items: center; }
+.trade-icon-btn {
+  width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: 1px solid transparent; color: var(--text-3);
+  cursor: pointer; font-size: 0.85rem; line-height: 1; border-radius: var(--r-sm);
+  transition: all var(--t-fast);
 }
-.trade-delete:hover { color: var(--red); background: var(--red-dim); }
+.trade-icon-btn:hover { color: var(--blue); background: var(--blue-dim); border-color: var(--blue); }
+.trade-icon-btn.danger:hover { color: var(--red); background: var(--red-dim); border-color: var(--red); }
+.trade-icon-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 .journal-empty {
   text-align: center; padding: 2.5rem var(--sp-4);
@@ -1899,7 +1906,7 @@ input.ctrl::placeholder { color: var(--text-3); }
 .result-badge.rb-be { color: var(--amber); border-color: var(--amber); background: var(--amber-dim); }
 .result-badge.rb-invalid { color: var(--text-3); }
 
-/* ── optional-details disclosure (Take Profit + Funding) ── */
+/* ── optional-details disclosure (Funding only — Take Profit is a normal field now) ── */
 .optional-toggle {
   background: none; border: none; color: var(--text-2); cursor: pointer;
   font-family: var(--font-ui); font-size: 0.72rem; font-weight: 600; padding: 4px 0;
@@ -1909,7 +1916,51 @@ input.ctrl::placeholder { color: var(--text-3); }
 .optional-toggle .car { transition: transform var(--t-fast); font-size: 0.6rem; }
 .optional-toggle.open .car { transform: rotate(90deg); }
 .optional-details { display: none; }
-.optional-details.open { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--sp-3); margin-bottom: var(--sp-3); }
+.optional-details.open { display: block; max-width: 260px; margin-bottom: var(--sp-3); }
+
+/* ── trade form layout: grouped, aligned, one field per cell ── */
+.form-row-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); margin-bottom: var(--sp-3); align-items: start; }
+.form-section-label {
+  font-family: var(--font-mono); font-size: 0.58rem; color: var(--text-3); letter-spacing: 1px;
+  text-transform: uppercase; margin: var(--sp-4) 0 var(--sp-2); padding-bottom: var(--sp-1);
+  border-bottom: 1px solid var(--border2);
+}
+/* Entry / Stop loss / Take profit / Exit: four identical cells. The quick-fill button sits INSIDE
+   the input, so every field is exactly the same width and height and labels can't wrap a field
+   out of line (the old row mixed inputs with and without a button next to them). */
+.price-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-3); align-items: start; }
+.price-grid .form-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.price-field { position: relative; }
+.price-field .form-input { width: 100%; box-sizing: border-box; }
+/* price inputs use step="any" — the up/down spinner is meaningless there and crowds the live button */
+.price-field input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+.price-field input[type=number]::-webkit-outer-spin-button,
+.price-field input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.price-field.has-live .form-input { padding-right: 46px; }
+.price-field .live-price-btn {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  padding: 3px 7px; font-size: 0.58rem; border-radius: var(--r-sm); background: var(--bg3);
+}
+.price-note { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; margin: var(--sp-3) 0; }
+.price-note .pn-label { font-family: var(--font-mono); font-size: 0.58rem; color: var(--text-3); letter-spacing: 1px; text-transform: uppercase; }
+.price-note .result-badge { padding: 4px 12px; font-size: 0.68rem; }
+.price-note .pn-hint { font-size: 0.62rem; color: var(--text-3); line-height: 1.4; flex: 1 1 220px; min-width: 0; }
+.form-hint { font-family: var(--font-mono); font-size: 0.58rem; color: var(--amber); line-height: 1.4; margin-top: var(--sp-2); }
+.form-hint[hidden] { display: none; }
+.form-input.invalid { border-color: var(--red); box-shadow: 0 0 0 1px var(--red-dim); }
+.form-msg { flex: 1 1 auto; min-width: 0; font-family: var(--font-mono); font-size: 0.64rem; color: var(--red); line-height: 1.4; }
+.form-actions { align-items: center; }
+.add-trade-form.edit-mode { margin-top: 0; margin-bottom: var(--sp-3); border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue-dim); }
+.form-edit-title {
+  display: flex; align-items: center; gap: 8px; margin-bottom: var(--sp-3); padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--border2); font-family: var(--font-mono); font-size: 0.64rem;
+  letter-spacing: 1px; text-transform: uppercase; color: var(--text-3);
+}
+.form-edit-title b { color: var(--blue); font-weight: 700; }
+@media (max-width: 640px) {
+  .price-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .form-row-2 { grid-template-columns: minmax(0, 1fr); }
+}
 
 .pos-calc {
   background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r-lg);
@@ -2234,6 +2285,9 @@ input.ctrl::placeholder { color: var(--text-3); }
   max-height: calc(100vh - 32px);
   overflow: visible;
 }
+/* While any modal is open (journal, summaries, calendar, alerts — all .journal-overlay) the floating
+   trade cards drop BEHIND its backdrop instead of sitting on top of the form's Save button. */
+body:has(.journal-overlay.open) .fw-wrap { z-index: 250; }
 .fw-card {
   pointer-events: auto;
   width: 272px;
@@ -3225,6 +3279,7 @@ input.ctrl::placeholder { color: var(--text-3); }
   <span>3-pivot harmonic divergence · rsi period 14 · bb period 20 · bb squeeze = tightest in 125 bars · fvg scanned on 4H + 1H · for informational use only</span>
 </div>
 <script src="src/detectors.js"></script>
+<script src="src/journal-edit.js"></script>
 <script>
 // ── STATE ──
 let tokenData = [];
@@ -6778,6 +6833,10 @@ function renderTokenDetailBody(symbol){
 const JOURNAL_KEY = '3drive_journal_v1';
 let jWeekOffset = 0;   // 0 = current week, -1 = last week, etc.
 let jActiveDay  = -1;  // 0=Mon … 6=Sun, -1 = today
+// The trade currently being edited in place, or null. { dk, id, rev, scaleOuts }
+//   rev       fingerprint at edit start (jTradeRev) — lets save notice a scan auto-closed the trade meanwhile
+//   scaleOuts the trade's scale-outs, so the form's live Result/R includes them like the stored R will
+let jEditing = null;
 
 // ── Storage helpers ──
 function jLoad() {
@@ -7072,10 +7131,11 @@ function openJournal() {
   openModalA11y('journalOverlay');
 }
 function closeJournal() {
+  jEditing = null;
   document.getElementById('journalOverlay').classList.remove('open');
   closeModalA11y('journalOverlay');
 }
-function journalPrevWeek() { jWeekOffset--; renderJournalWeek(); }
+function journalPrevWeek() { jEditing = null; jWeekOffset--; renderJournalWeek(); }
 
 // ── MONTH CALENDAR — daily +/- P&L at a glance ──
 let monthCalOffset = 0; // months relative to the current real month
@@ -7150,6 +7210,7 @@ function renderMonthCalendar() {
 
 // Clicking a day in the month view jumps straight to that day in the weekly journal view
 function jumpToCalendarDay(dk) {
+  jEditing = null;
   closeMonthCalendar();
   const target = new Date(dk+'T00:00:00');
   const now = new Date();
@@ -7159,7 +7220,7 @@ function jumpToCalendarDay(dk) {
   jActiveDay = target.getDay()===0 ? 6 : target.getDay()-1;
   renderJournalWeek();
 }
-function journalNextWeek() { jWeekOffset++; renderJournalWeek(); }
+function journalNextWeek() { jEditing = null; jWeekOffset++; renderJournalWeek(); }
 
 // ── Render week tabs ──
 function renderJournalWeek() {
@@ -7180,8 +7241,242 @@ function renderJournalWeek() {
 }
 
 function jSelectDay(idx) {
+  jEditing = null;
   jActiveDay = idx;
   renderJournalWeek();
+}
+
+// ── minimal HTML escape for user-typed text rendered into the trade cards ──
+function jEsc(v){
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ── The trade form. ONE form serves both "log trade" and "edit trade" (same ids, so every existing
+//    reader — jUpdatePosCalc, jComputeResult, jSaveTrade — works for both). Layout, top to bottom:
+//    Token | Direction · Timeframe · Leverage · PRICES (Entry, Stop loss, Take profit, Exit — four equal
+//    cells) · Result · Funding · calculator · Notes · actions. ──
+function jFormHTML(key, editing){
+  const lev = jLastLeverage();
+  const levPresets = [1,3,5,10,20,25,50,75,100].map(v => `<button type="button" class="lev-preset" data-lev="${v}" onclick="jSetLeveragePreset(${v})">${v}x</button>`).join('');
+  const tfChips = ['4H','1H','30M','15M','5M','1D'].map(t => `<button type="button" class="tf-chip${t==='1H'?' active':''}" onclick="jSetTf('${t}')" aria-pressed="${t==='1H'}">${t}</button>`).join('');
+  return `
+    <div class="add-trade-wrap${editing?' is-editing':''}">
+      ${editing ? '' : `<button class="add-trade-toggle" onclick="jToggleForm()">+ log trade</button>`}
+      <div class="add-trade-form${editing?' open edit-mode':''}" id="addTradeForm"${editing ? ` data-edit-id="${jEsc(jEditing.id)}"` : ''}>
+        ${editing ? `<div class="form-edit-title">Editing <b id="jEditTitle"></b></div>` : ''}
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label" for="jToken">Token</label>
+            <input class="form-input" id="jToken" placeholder="BTC" style="text-transform:uppercase" oninput="jOnFormInput(this)">
+          </div>
+          <div class="form-group">
+            <label class="form-label" id="jDirLabel">Direction</label>
+            <div class="dir-toggle" role="group" aria-labelledby="jDirLabel">
+              <button type="button" class="dir-btn long active" id="jDirLongBtn" onclick="jSetDir('long')" aria-pressed="true">▲ Long</button>
+              <button type="button" class="dir-btn short" id="jDirShortBtn" onclick="jSetDir('short')" aria-pressed="false">▼ Short</button>
+            </div>
+            <input type="hidden" id="jDir" value="long">
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:var(--sp-3)">
+          <label class="form-label" id="jTfLabel">Timeframe</label>
+          <div class="tf-chip-row" role="group" aria-labelledby="jTfLabel">${tfChips}</div>
+          <input type="hidden" id="jTf" value="1H">
+        </div>
+
+        <div class="form-group" style="margin-bottom:var(--sp-3)">
+          <label class="form-label" for="jLeverage">Leverage</label>
+          <div class="lev-gauge-row">
+            <input class="lev-slider" id="jLeverage" type="range" min="1" max="100" step="1" value="${lev}" oninput="jOnLeverageInput()" aria-describedby="jLeverageReadout">
+            <span class="lev-readout" id="jLeverageReadout">${lev}x</span>
+          </div>
+          <div class="lev-presets">${levPresets}</div>
+        </div>
+
+        <div class="form-section-label">Prices</div>
+        <div class="price-grid">
+          <div class="form-group">
+            <label class="form-label" for="jEntry">Entry</label>
+            <div class="price-field has-live">
+              <input class="form-input" id="jEntry" type="number" step="any" placeholder="0.00" oninput="jOnFormInput(this)">
+              <button type="button" class="live-price-btn" onclick="jUseLivePrice('jEntry')" title="Fill in the token's live scanned price">live</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="jSl">Stop loss</label>
+            <div class="price-field">
+              <input class="form-input" id="jSl" type="number" step="any" placeholder="0.00" oninput="jOnFormInput(this)">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="jTp">Take profit</label>
+            <div class="price-field">
+              <input class="form-input" id="jTp" type="number" step="any" placeholder="0.00" oninput="jOnFormInput(this)">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="jExit">Exit</label>
+            <div class="price-field has-live">
+              <input class="form-input" id="jExit" type="number" step="any" placeholder="open" oninput="jOnFormInput(this)">
+              <button type="button" class="live-price-btn" onclick="jUseLivePrice('jExit')" title="Fill in the token's live scanned price">live</button>
+            </div>
+          </div>
+        </div>
+        <div class="form-hint" id="jSlNote" hidden></div>
+        <div class="price-note">
+          <span class="pn-label">Result</span>
+          <div class="result-badge rb-open" id="jResultBadge">OPEN</div>
+          <span class="pn-hint">Leave Exit blank while the trade is open. A scan closes it automatically when it sees the stop loss or take profit hit.</span>
+        </div>
+
+        <button type="button" class="optional-toggle" id="jOptionalToggle" onclick="jToggleOptional()"><span class="car">▸</span> Funding (optional)</button>
+        <div class="optional-details" id="jOptionalDetails">
+          <div class="form-group">
+            <label class="form-label" for="jFunding" title="What your exchange actually charged or paid you in funding for this position. A suggestion is filled in from the Weekly Balance settings, but this app has no way to know your real holding time — check your exchange and correct it.">Funding ($)</label>
+            <input class="form-input" id="jFunding" type="number" step="any" placeholder="0.00" oninput="jFundingTouched=true; jOnFormInput(this)">
+          </div>
+        </div>
+        <!-- Position size calculator — uses the same fixed $ risk you've already set in
+             Weekly Balance, so there's one risk number for the whole app, not two that can
+             silently drift apart. Reads Entry / SL / TP above. -->
+        <div class="pos-calc">
+          <div class="pos-calc-header">Position size calculator</div>
+          <div class="pos-calc-risk-line" id="posCalcRiskLine"></div>
+          <div class="pos-calc-result" id="posCalcResult">Enter Entry and Stop Loss above to calculate position size</div>
+        </div>
+        <div class="form-group" style="margin-bottom:8px">
+          <label class="form-label" for="jNotes">Notes (optional)</label>
+          <textarea class="form-input form-notes" id="jNotes" placeholder="Setup, mistakes, observations..."></textarea>
+        </div>
+        <div class="form-actions">
+          <span class="form-msg" id="jFormMsg" role="alert" aria-live="polite"></span>
+          <button class="form-btn-cancel" onclick="${editing ? 'jCancelEdit()' : 'jToggleForm()'}">Cancel</button>
+          <button class="form-btn-save" onclick="jSaveTrade('${key}')">${editing ? 'Save changes' : 'Save Trade'}</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Form state that must survive a re-render ──
+const J_FORM_IDS = ['jToken','jDir','jTf','jLeverage','jEntry','jSl','jTp','jExit','jFunding','jNotes'];
+function jFormSnapshot(key){
+  const f = document.getElementById('addTradeForm');
+  if(!f || !f.classList.contains('open')) return null;
+  const values = {};
+  J_FORM_IDS.forEach(id => { const el = document.getElementById(id); values[id] = el ? el.value : ''; });
+  return {
+    key, values, editId: f.dataset.editId || null,
+    optionalOpen: !!document.getElementById('jOptionalDetails')?.classList.contains('open'),
+    fundingTouched: jFundingTouched
+  };
+}
+function jFormRestore(snap){
+  J_FORM_IDS.forEach(id => { const el = document.getElementById(id); if(el) el.value = snap.values[id]; });
+  jFundingTouched = snap.fundingTouched;
+  jSyncDirButtons(); jSyncTfChips(); jOnLeverageInput();
+  jToggleOptional(snap.optionalOpen);
+  const fund = document.getElementById('jFunding');
+  if(fund) fund.value = snap.values.jFunding;      // exactly what was typed, never a fresh suggestion
+}
+// Runs right after the day is re-rendered: put the form back as it was, or fill a fresh edit form.
+function jFormAfterRender(key, snap, editingHere, trades){
+  if(editingHere){
+    const trade = trades.find(t => t.id === jEditing.id);
+    if(snap && snap.key === key && snap.editId === jEditing.id) jFormRestore(snap);
+    else if(trade) jFillForm(jTradeToFormValues(trade), trade);
+    if(trade) jSetEditTitle(trade);
+    return;
+  }
+  // "log trade" form: reopen it with its typed values if it was open on this same day
+  if(snap && snap.key === key && !snap.editId){
+    document.getElementById('addTradeForm')?.classList.add('open');
+    jFormRestore(snap);
+  }
+}
+function jSetEditTitle(trade){
+  const el = document.getElementById('jEditTitle');
+  if(el) el.textContent = `${trade.symbol} ${String(trade.dir||'').toUpperCase()} · ${trade.tf}${trade.time ? ' · logged ' + trade.time : ''}`;
+}
+// Fill the form from a stored trade's values (see jTradeToFormValues in src/journal-edit.js)
+function jFillForm(v, trade){
+  document.getElementById('jToken').value = v.symbol;
+  document.getElementById('jDir').value = v.dir;
+  document.getElementById('jTf').value = v.tf;
+  document.getElementById('jLeverage').value = v.leverage;
+  document.getElementById('jEntry').value = v.entry;
+  document.getElementById('jSl').value = v.sl;
+  document.getElementById('jTp').value = v.tp;
+  document.getElementById('jExit').value = v.exit;
+  document.getElementById('jNotes').value = v.notes;
+  jFundingTouched = v.hasFunding;                 // a recorded funding figure is never overwritten by the suggestion
+  document.getElementById('jFunding').value = v.funding;
+  const note = document.getElementById('jSlNote');
+  if(note){
+    if(v.slMoves > 0){
+      note.hidden = false;
+      note.textContent = `Stop loss shown is the ORIGINAL stop (R is measured against it). It was moved ${v.slMoves}x and now sits at ${v.currentSl} — use Adjust SL on the card to move it.`;
+    } else { note.hidden = true; note.textContent = ''; }
+  }
+  jSyncDirButtons(); jSyncTfChips(); jOnLeverageInput();
+  jToggleOptional(v.hasFunding);
+  const fund = document.getElementById('jFunding'); if(fund) fund.value = v.funding;
+}
+
+// ── Inline form errors (replaces the old red-border-only validation) ──
+const J_FIELD_INPUT = { symbol:'jToken', entry:'jEntry', sl:'jSl', tp:'jTp', exit:'jExit', funding:'jFunding' };
+function jSetFormMsg(msg){ const el = document.getElementById('jFormMsg'); if(el) el.textContent = msg || ''; }
+function jClearFormErrors(){
+  document.querySelectorAll('#addTradeForm .form-input.invalid').forEach(el => el.classList.remove('invalid'));
+  jSetFormMsg('');
+}
+function jShowFormErrors(check){
+  jClearFormErrors();
+  let firstEl = null;
+  check.errors.forEach(e => {
+    const el = document.getElementById(J_FIELD_INPUT[e.field]);
+    if(el){ el.classList.add('invalid'); if(!firstEl) firstEl = el; }
+  });
+  jSetFormMsg(check.message);
+  if(firstEl) firstEl.focus();
+}
+// Typing in a field clears its own error, then refreshes the calculator + Result badge
+function jOnFormInput(el){
+  if(el && el.classList) el.classList.remove('invalid');
+  if(!document.querySelector('#addTradeForm .form-input.invalid')) jSetFormMsg('');
+  jUpdatePosCalc();
+}
+
+// ── Edit a logged trade, in place ──
+function jEditTrade(dk, idx){
+  const data = jLoad();
+  const trade = data[dk]?.[idx];
+  if(!trade) return;
+  if(!trade.id){ trade.id = 't_'+Date.now()+'_'+Math.random().toString(36).slice(2,8); jSave(data); }  // older trades have none
+  jEditing = { dk, id: trade.id, rev: jTradeRev(trade), scaleOuts: (trade.scaleOuts || []).slice() };
+  renderJournalWeek();
+  const f = document.getElementById('addTradeForm');
+  if(f){
+    f.scrollIntoView({ block:'nearest', behavior:'smooth' });
+    const entry = document.getElementById('jEntry'); if(entry) entry.focus({ preventScroll:true });
+  }
+}
+function jCancelEdit(){
+  jEditing = null;
+  renderJournalWeek();
+}
+function jSaveEdit(vals, outcome){
+  const data = jLoad();
+  const trade = (data[jEditing.dk] || []).find(t => t.id === jEditing.id);
+  if(!trade){ jEditing = null; renderJournalWeek(); alert('That trade no longer exists.'); return; }
+  if(jTradeRev(trade) !== jEditing.rev &&
+     !confirm('This trade changed while you were editing it (for example, a scan auto-closed it). Saving will overwrite that change. Save anyway?')) return;
+  jApplyTradeEdit(trade, vals, outcome, Date.now());
+  jSave(data);
+  jEditing = null;
+  renderJournalWeek();
+  refreshFloatingTrades();
 }
 
 // ── Render day trades + add form + weekly summary ──
@@ -7191,6 +7486,13 @@ function renderJournalDay(days) {
   const data = jLoad();
   const trades = data[key]||[];
   const bodyEl = document.getElementById('journalBody');
+
+  // Editing state: only valid while that exact trade still exists on this day.
+  const editingHere = !!(jEditing && jEditing.dk === key && trades.some(t => t.id === jEditing.id));
+  if(jEditing && !editingHere) jEditing = null;
+  // Whatever is typed in the open form survives a re-render (an auto-close from a scan, a Scale Out
+  // click on another card…) instead of silently vanishing. Taken BEFORE the DOM is replaced below.
+  const formSnap = jFormSnapshot(key);
 
   // Trade cards
   const cardsHTML = trades.length
@@ -7223,16 +7525,22 @@ function renderJournalDay(days) {
             <button class="trade-action-btn" onclick="jAdjustSL('${key}',${i})">Adjust SL</button>
             <button class="trade-action-btn close" onclick="jCloseTrade('${key}',${i})">Close Trade</button>
           </div>` : '';
+        if(editingHere && t.id === jEditing.id) return jFormHTML(key, true);
         return `<div class="trade-card ${resultClass}">
-          <button class="trade-delete" onclick="jDeleteTrade('${key}',${i})" title="Delete" aria-label="Delete trade">✕</button>
           <div class="trade-card-top">
-            <span class="trade-symbol">${t.symbol}</span>
+            <span class="trade-symbol">${jEsc(t.symbol)}</span>
             <span class="trade-dir ${t.dir}">${t.dir.toUpperCase()}</span>
             <span class="trade-tf">${t.tf}</span>
             <span class="trade-tf" title="Leverage used on this trade">${Math.max(1, parseFloat(t.leverage)||1)}x</span>
             <span class="trade-result-pill ${resultClass}">${resultLabel}</span>
             ${autoTag}
-            <span class="trade-r ${rClass}">${rLabel}${pnlLabel}</span>
+            <span class="trade-card-right">
+              <span class="trade-r ${rClass}">${rLabel}${pnlLabel}</span>
+              <span class="trade-tools">
+                <button class="trade-icon-btn" onclick="jEditTrade('${key}',${i})" title="Edit trade" aria-label="Edit trade">✎</button>
+                <button class="trade-icon-btn danger" onclick="jDeleteTrade('${key}',${i})" title="Delete trade" aria-label="Delete trade">✕</button>
+              </span>
+            </span>
           </div>
           <div class="trade-prices">
             <span><b>ENTRY</b><span>${t.entry}</span></span>
@@ -7241,106 +7549,15 @@ function renderJournalDay(days) {
             <span><b>EXIT</b>${t.exit||'—'}</span>
           </div>
           ${scaleOutStr}
-          ${t.notes ? `<div class="trade-notes">${t.notes}</div>` : ''}
+          ${t.notes ? `<div class="trade-notes">${jEsc(t.notes)}</div>` : ''}
           <div class="trade-time">${t.time||''}</div>
           ${actionsHTML}
         </div>`;
       }).join('')
     : `<div class="journal-empty">no trades logged for ${DAY_NAMES[jActiveDay]}</div>`;
 
-  // Add trade form
-  const formHTML = `
-    <div class="add-trade-wrap">
-      <button class="add-trade-toggle" onclick="jToggleForm()">+ log trade</button>
-      <div class="add-trade-form" id="addTradeForm">
-        <div class="form-grid" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));">
-          <div class="form-group">
-            <label class="form-label" for="jToken">Token</label>
-            <input class="form-input" id="jToken" placeholder="BTC" style="text-transform:uppercase">
-          </div>
-          <div class="form-group">
-            <label class="form-label" id="jDirLabel">Direction</label>
-            <div class="dir-toggle" role="group" aria-labelledby="jDirLabel">
-              <button type="button" class="dir-btn long active" id="jDirLongBtn" onclick="jSetDir('long')" aria-pressed="true">▲ Long</button>
-              <button type="button" class="dir-btn short" id="jDirShortBtn" onclick="jSetDir('short')" aria-pressed="false">▼ Short</button>
-            </div>
-            <input type="hidden" id="jDir" value="long">
-          </div>
-        </div>
-
-        <div class="form-group" style="margin-bottom:var(--sp-3)">
-          <label class="form-label" id="jTfLabel">Timeframe</label>
-          <div class="tf-chip-row" role="group" aria-labelledby="jTfLabel">
-            ${['4H','1H','30M','15M','5M','1D'].map(t => `<button type="button" class="tf-chip${t==='1H'?' active':''}" onclick="jSetTf('${t}')" aria-pressed="${t==='1H'}">${t}</button>`).join('')}
-          </div>
-          <input type="hidden" id="jTf" value="1H">
-        </div>
-
-        <div class="form-group" style="margin-bottom:var(--sp-3)">
-          <label class="form-label" for="jLeverage">Leverage</label>
-          <div class="lev-gauge-row">
-            <input class="lev-slider" id="jLeverage" type="range" min="1" max="100" step="1" value="${jLastLeverage()}" oninput="jOnLeverageInput()" aria-describedby="jLeverageReadout">
-            <span class="lev-readout" id="jLeverageReadout">${jLastLeverage()}x</span>
-          </div>
-          <div class="lev-presets">
-            ${[1,3,5,10,20,25,50,75,100].map(v => `<button type="button" class="lev-preset" data-lev="${v}" onclick="jSetLeveragePreset(${v})">${v}x</button>`).join('')}
-          </div>
-        </div>
-
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label" for="jEntry">Entry</label>
-            <div class="input-with-btn">
-              <input class="form-input" id="jEntry" type="number" step="any" placeholder="0.00" oninput="jUpdatePosCalc()">
-              <button type="button" class="live-price-btn" onclick="jUseLivePrice('jEntry')" title="Fill in the token's live scanned price">live</button>
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="jSl">Stop Loss</label>
-            <input class="form-input" id="jSl" type="number" step="any" placeholder="0.00" oninput="jUpdatePosCalc()">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="jExit">Exit Price (blank = still open)</label>
-            <div class="input-with-btn">
-              <input class="form-input" id="jExit" type="number" step="any" placeholder="0.00" oninput="jUpdatePosCalc()">
-              <button type="button" class="live-price-btn" onclick="jUseLivePrice('jExit')" title="Fill in the token's live scanned price">live</button>
-            </div>
-          </div>
-          <div class="form-group result-badge-wrap">
-            <label class="form-label">Result <span style="text-transform:none;letter-spacing:0;opacity:0.7">(auto)</span></label>
-            <div class="result-badge rb-open" id="jResultBadge">OPEN</div>
-          </div>
-        </div>
-
-        <button type="button" class="optional-toggle" id="jOptionalToggle" onclick="jToggleOptional()"><span class="car">▸</span> Target &amp; funding (optional)</button>
-        <div class="optional-details" id="jOptionalDetails">
-          <div class="form-group">
-            <label class="form-label" for="jTp">Take Profit</label>
-            <input class="form-input" id="jTp" type="number" step="any" placeholder="0.00 (target, optional)">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="jFunding" title="What your exchange actually charged or paid you in funding for this position. A suggestion is filled in from the Weekly Balance settings, but this app has no way to know your real holding time — check your exchange and correct it.">Funding ($, optional)</label>
-            <input class="form-input" id="jFunding" type="number" step="any" placeholder="0.00" oninput="jFundingTouched=true">
-          </div>
-        </div>
-        <!-- Position size calculator — uses the same fixed $ risk you've already set in
-             Weekly Balance, so there's one risk number for the whole app, not two that can
-             silently drift apart. Just reads Entry/SL above to compute position size. -->
-        <div class="pos-calc">
-          <div class="pos-calc-header">Position size calculator</div>
-          <div class="pos-calc-risk-line" id="posCalcRiskLine"></div>
-          <div class="pos-calc-result" id="posCalcResult">Enter Entry and Stop Loss above to calculate position size</div>
-        </div>
-        <div class="form-group" style="margin-bottom:8px">
-          <label class="form-label" for="jNotes">Notes (optional)</label>
-          <textarea class="form-input form-notes" id="jNotes" placeholder="Setup, mistakes, observations..."></textarea>
-        </div>
-        <div class="form-actions">
-          <button class="form-btn-cancel" onclick="jToggleForm()">Cancel</button>
-          <button class="form-btn-save" onclick="jSaveTrade('${key}')">Save Trade</button>
-        </div>
-      </div>
-    </div>`;
+  // Log-trade form (hidden while a trade is being edited — the edit form takes the card's place)
+  const formHTML = editingHere ? '' : jFormHTML(key, false);
 
   // Weekly compounding balance — derived fresh every render, so it always reflects the
   // latest trades with zero extra bookkeeping, and resets naturally each week since it only
@@ -7419,6 +7636,7 @@ function renderJournalDay(days) {
     </div>` : '';
 
   bodyEl.innerHTML = cardsHTML + formHTML + weeklyBalanceHTML + summaryHTML;
+  jFormAfterRender(key, formSnap, editingHere, trades);
 }
 
 function jToggleWbSettings() {
@@ -7921,12 +8139,14 @@ function jUseLivePrice(fieldId){
   const token = symbol ? findTokenBySymbol(symbol) : null;
   if(!token || !(token.price > 0)){
     if(btn){
-      btn.textContent = symbol ? 'no scan data' : 'enter token first';
       btn.classList.add('not-found');
-      setTimeout(() => { btn.textContent = 'live'; btn.classList.remove('not-found'); }, 1800);
+      setTimeout(() => btn.classList.remove('not-found'), 1800);
     }
+    // the button lives inside the input now, so the explanation goes in the form's message line
+    jSetFormMsg(symbol ? `No scan data for ${symbol} yet — enter the price manually.` : 'Enter the token first, then use live.');
     return;
   }
+  jSetFormMsg('');
   document.getElementById(fieldId).value = token.price;
   jUpdatePosCalc();
 }
@@ -7940,7 +8160,8 @@ function jComputeResult(){
   const exitRaw = document.getElementById('jExit').value;
   if(exitRaw === '' || exitRaw == null) return { result: 'open', r: null };
   if(entry === '' || sl === '') return { result: null, r: null };   // can't classify yet
-  const r = jCalcBlendedR({ entry, dir, sl, scaleOuts: [] }, exitRaw);
+  // while editing, existing scale-outs are part of the trade, exactly as in the stored R
+  const r = jCalcBlendedR({ entry, dir, sl, scaleOuts: jEditing ? jEditing.scaleOuts : [] }, exitRaw);
   if(r == null) return { result: null, r: null };                    // e.g. SL on the wrong side of entry
   const EPS = 0.001;
   const result = r > EPS ? 'win' : r < -EPS ? 'loss' : 'be';
@@ -8023,6 +8244,20 @@ function jUpdatePosCalc() {
 
   const slBeyondLiq = dir === 'long' ? (sl < liqPrice) : (sl > liqPrice);
 
+  // Take profit: what the trade makes if it gets there (same model as the journal's P&L), and the
+  // reward : risk it implies. A TP on the wrong side of entry is flagged rather than previewed.
+  let tpHTML = '';
+  const tpRaw = document.getElementById('jTp')?.value;
+  if(tpRaw !== '' && tpRaw != null){
+    const pv = jTpPreview({ dir, entry, sl, tp: tpRaw, margin, leverage, feePct: wbFeeRatePct() });
+    if(pv.valid){
+      tpHTML = `<div class="pos-calc-row"><span>Profit if TP hit (after fees)</span><b>${fmtUsdSigned(pv.net)} <span style="opacity:.7;font-weight:500">(price ${dir==='long'?'+':'−'}${(pv.pct*100).toFixed(2)}%)</span></b></div>` +
+        (pv.rr != null ? `<div class="pos-calc-row"><span>Reward : risk</span><b>${pv.rr.toFixed(2)} : 1</b></div>` : '');
+    } else if(pv.reason === 'wrong-side'){
+      tpHTML = `<div class="pos-calc-warning">Take profit is on the wrong side of entry for a ${dir}.</div>`;
+    }
+  }
+
   let warningHTML = '';
   if(slBeyondLiq){
     warningHTML = `<div class="pos-calc-warning">⚠ At ${leverage}x, your stop loss sits beyond the estimated liquidation price ($${liqPrice.toLocaleString(undefined,{maximumFractionDigits:6})}) — you'd likely get liquidated before your stop ever triggers, losing the full $${margin.toLocaleString(undefined,{maximumFractionDigits:2})} margin instead of the amount your stop implied. Lower the leverage or move your stop closer.</div>`;
@@ -8035,11 +8270,12 @@ function jUpdatePosCalc() {
     <div class="pos-calc-row"><span>Est. liquidation price</span><b>$${liqPrice.toLocaleString(undefined,{maximumFractionDigits:6})}</b></div>
     <div class="pos-calc-row"><span>$ loss if SL hit</span><b>$${cappedLoss.toLocaleString(undefined,{maximumFractionDigits:2})}${dollarLossAtSL>margin?' (capped by margin)':''}</b></div>
     <div class="pos-calc-row"><span>Round-trip fee (${wbFeeRatePct()}% x 2)</span><b>−$${feeCost.toLocaleString(undefined,{maximumFractionDigits:2})}</b></div>
+    ${tpHTML}
     ${warningHTML}
     <div class="pos-calc-note">Liquidation price is an estimate (~${(DEFAULT_MMR*100).toFixed(1)}% maintenance margin assumed) — always confirm the exact figure on your exchange before entering.</div>`;
 }
 
-// ── Save trade ──
+// ── Save trade (add OR edit — same form, same validation) ──
 function jSaveTrade(dateKey) {
   const symbol  = document.getElementById('jToken').value.trim().toUpperCase();
   const dir     = document.getElementById('jDir').value;
@@ -8049,24 +8285,23 @@ function jSaveTrade(dateKey) {
   const sl      = document.getElementById('jSl').value;
   const tp      = document.getElementById('jTp').value;
   const exit    = document.getElementById('jExit').value;
-  const { result: computedResult, r: computedR } = jComputeResult();
   const fundingRaw = document.getElementById('jFunding').value;
-  const funding = fundingRaw === '' ? 0 : (parseFloat(fundingRaw) || 0);
   const notes   = document.getElementById('jNotes').value.trim();
 
-  if(!symbol||!entry||!sl) {
-    document.getElementById('jToken').style.borderColor = !symbol?'#ff4466':'';
-    document.getElementById('jEntry').style.borderColor = !entry?'#ff4466':'';
-    document.getElementById('jSl').style.borderColor   = !sl?'#ff4466':'';
+  // Rules live in src/journal-edit.js: required fields, numeric prices, stop AND take profit on the
+  // right side of entry for the chosen direction (a wrong-side level would auto-close instantly).
+  const check = jValidateTradeForm({ symbol, dir, entry, sl, tp, exit, funding: fundingRaw });
+  if(!check.ok){ jShowFormErrors(check); return; }
+  jClearFormErrors();
+
+  const { result, r } = jComputeResult();
+  if(result == null){ jShowFormErrors({ errors:[{ field:'sl', msg:'Check entry, stop loss and exit.' }], message:'Check entry, stop loss and exit.' }); return; }
+  const funding = fundingRaw === '' ? 0 : (parseFloat(fundingRaw) || 0);
+
+  if(jEditing){
+    jSaveEdit({ symbol, dir, tf, leverage, entry, sl, tp, exit, funding, notes }, { result, r });
     return;
   }
-  if(computedResult == null){
-    // exit was given but SL sits on the wrong side of entry for the chosen direction — jCalcBlendedR
-    // can't turn that into an R, so there is nothing sensible to auto-classify yet.
-    document.getElementById('jSl').style.borderColor = '#ff4466';
-    return;
-  }
-  const result = computedResult;
 
   const now = new Date();
   const trade = {
@@ -8081,7 +8316,7 @@ function jSaveTrade(dateKey) {
     openedAt:   now.getTime(), // real epoch ms — lets auto-resolve check candle history since this exact moment, not just live price
     time: now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})
   };
-  trade.r = computedR;
+  trade.r = r;
 
   const data = jLoad();
   if(!data[dateKey]) data[dateKey] = [];
@@ -8091,7 +8326,7 @@ function jSaveTrade(dateKey) {
   // Reset form
   ['jToken','jEntry','jSl','jTp','jExit','jFunding','jNotes'].forEach(id => {
     const el = document.getElementById(id);
-    el.value=''; el.style.borderColor='';
+    el.value=''; el.classList.remove('invalid');
   });
   jFundingTouched = false;
   jUpdateResultBadge();
@@ -8107,7 +8342,11 @@ function jSaveTrade(dateKey) {
 function jDeleteTrade(dk, idx) {
   if(!confirm('Delete this trade?')) return;
   const data = jLoad();
-  if(data[dk]) { data[dk].splice(idx,1); jSave(data); }
+  if(data[dk]) {
+    const gone = data[dk][idx];
+    if(jEditing && gone && gone.id === jEditing.id) jEditing = null;
+    data[dk].splice(idx,1); jSave(data);
+  }
   renderJournalWeek();
   refreshFloatingTrades();
 }
@@ -8398,7 +8637,7 @@ document.addEventListener('keydown', function(e){
     if(document.getElementById('moreDropdown')?.classList.contains('open')) { closeMoreMenu(); return; }
     if(document.getElementById('ecoModal')?.classList.contains('open')) { closeCalModal(); return; }
     if(document.getElementById('monthCalOverlay')?.classList.contains('open')) { closeMonthCalendar(); return; }
-    if(document.getElementById('journalOverlay')?.classList.contains('open')) { closeJournal(); return; }
+    if(document.getElementById('journalOverlay')?.classList.contains('open')) { if(jEditing){ jCancelEdit(); return; } closeJournal(); return; }
     if(document.getElementById('alertsOverlay')?.classList.contains('open')) { closeAlerts(); return; }
     if(document.getElementById('hitRateOverlay')?.classList.contains('open')) { closeHitRate(); return; }
   }
