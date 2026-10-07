@@ -287,6 +287,22 @@ body {
 }
 .live-label { color: var(--text-2); font-size: 0.6rem; }
 
+/* Market-activity pill: always-visible "is it quiet right now?" next to the live-price pill */
+.ma-pill {
+  display: flex; align-items: center; gap: 6px; background: var(--bg2); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 5px 10px; font-family: var(--font-mono); font-size: 0.58rem;
+  color: var(--text-3); white-space: nowrap; cursor: pointer; transition: border-color var(--t-fast), color var(--t-fast);
+}
+.ma-pill[hidden] { display: none; }
+.ma-pill:hover { border-color: var(--blue); }
+.ma-pill:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.ma-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); flex-shrink: 0; transition: background 0.4s; }
+.ma-pill.quiet { border-color: var(--amber); color: var(--amber); }
+.ma-pill.quiet .ma-dot { background: var(--amber); }
+.ma-pill.active { color: var(--green); }
+.ma-pill.active .ma-dot { background: var(--green); }
+@media (max-width: 640px) { .ma-pre { display: none; } }
+
 /* ── SIGNAL CHIPS STRIP — replaces the old scrolling ticker marquee. Static, no motion;
    only shows tokens with an active signal, so it's a meaningful glance, not a wall of noise. ── */
 .ticker-strip {
@@ -2603,6 +2619,8 @@ body:has(.journal-overlay.open) .fw-wrap { z-index: 250; }
 }
 .xo-toast.bull { border-left-color: var(--green); }
 .xo-toast.bear { border-left-color: var(--red); }
+.xo-toast.quiet { border-left-color: var(--amber); }
+.xo-toast.quiet .xo-toast-dir { color: var(--amber); }
 .xo-toast-main { flex: 1; min-width: 0; }
 .xo-toast-title { font-size: 0.72rem; font-weight: 700; color: var(--text); }
 .xo-toast.bull .xo-toast-dir { color: var(--green); }
@@ -2680,6 +2698,9 @@ body:has(.journal-overlay.open) .fw-wrap { z-index: 250; }
     </div>
   </div>
   <div class="topbar-right">
+    <div class="ma-pill" id="maPill" hidden role="button" tabindex="0" onclick="maOnPillClick()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();maOnPillClick();}" title="Market activity">
+      <span class="ma-dot" id="maDot"></span><span class="ma-pre">Market · </span><span id="maLabel">—</span>
+    </div>
     <div class="live-status" id="liveStatus" onclick="manualRefreshLivePrices()" title="Click to force-reconnect live prices" role="button" tabindex="0">
       <div id="liveDot" class="live-dot"></div>
       <span id="liveLabel" class="live-label" aria-live="polite">checking…</span>
@@ -3280,6 +3301,7 @@ body:has(.journal-overlay.open) .fw-wrap { z-index: 250; }
 </div>
 <script src="src/detectors.js"></script>
 <script src="src/journal-edit.js"></script>
+<script src="src/market-activity.js"></script>
 <script>
 // ── STATE ──
 let tokenData = [];
@@ -9235,6 +9257,132 @@ function xoDeliver(items, opts){
     } catch(e){ /* some browsers only allow notifications from a service worker — toasts still work */ }
   }
 }
+
+// ── Market activity: "is it unusually quiet right now?" ──
+// Logic (baselines, thresholds, hysteresis, alert gating) lives in src/market-activity.js and is unit-tested;
+// this block only fetches candles, keeps the pill current and delivers the notification.
+// Every hour, shortly after the candle closes, it reads 1H candles for a basket of liquid coins through the
+// proxy (so it works even when the browser can't reach Binance directly) and compares the latest 4 closed
+// hours with the same hours on previous days. It notifies once when the market turns quiet, and keeps a
+// pill in the top bar so the current state is always visible.
+const MA_BASKET = ['BTC','ETH','SOL','BNB','XRP','DOGE','ADA','AVAX','LINK','LTC','DOT','NEAR'];
+const MA_KEY = '3drive_market_activity';
+let maBusy = false, maTimer = null, maLastEvalAt = 0;
+
+function maLoad(){
+  try { return JSON.parse(localStorage.getItem(MA_KEY) || '{}') || {}; } catch(e){ return {}; }
+}
+function maSave(v){ try { localStorage.setItem(MA_KEY, JSON.stringify(v)); } catch(e){} }
+
+// run `fn` over `items` with at most `limit` in flight
+async function maPool(items, limit, fn){
+  const out = new Array(items.length); let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while(next < items.length){ const i = next++; out[i] = await fn(items[i]); }
+  }));
+  return out;
+}
+
+function maRenderPill(rec){
+  const pill = document.getElementById('maPill'), label = document.getElementById('maLabel');
+  if(!pill || !label) return;
+  pill.hidden = false;
+  pill.classList.remove('quiet','active','normal');
+  if(!rec || !rec.state || rec.state === 'unknown'){ label.textContent = '—'; pill.title = 'Market activity: not enough recent candle data to judge'; return; }
+  pill.classList.add(rec.state);
+  const agg = rec.vol == null ? null : { vol: rec.vol, range: rec.range, n: rec.n, samples: rec.samples };
+  const d = maDescribe(rec.state, agg);
+  label.textContent = d.short;
+  const since = rec.since ? ` Since ${new Date(rec.since).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}.` : '';
+  pill.title = `${d.title}. ${d.body}${since} Click to refresh.`;
+}
+
+function maShowToast(kind, d){
+  const box = document.getElementById('xoToasts');
+  if(!box) return;
+  const el = document.createElement('div');
+  el.className = 'xo-toast ' + (kind === 'quiet' ? 'quiet' : 'bull');
+  const main = document.createElement('div'); main.className = 'xo-toast-main';
+  const title = document.createElement('div'); title.className = 'xo-toast-title';
+  const tag = document.createElement('span'); tag.className = 'xo-toast-dir'; tag.textContent = kind === 'quiet' ? '◔ QUIET' : '● MARKET';
+  title.append(tag, ' · ' + d.title);
+  const sub = document.createElement('div'); sub.className = 'xo-toast-sub'; sub.textContent = d.body;
+  main.append(title, sub);
+  const x = document.createElement('button'); x.className = 'xo-toast-x'; x.type = 'button'; x.setAttribute('aria-label', 'Dismiss'); x.textContent = '✕';
+  const kill = () => { clearTimeout(timer); el.remove(); };
+  const timer = setTimeout(kill, XO_TOAST_MS);
+  x.addEventListener('click', e => { e.stopPropagation(); kill(); });
+  el.addEventListener('click', kill);
+  el.append(main, x);
+  box.appendChild(el);
+}
+
+// Quiet -> toast + log + (your existing settings) desktop notification and sound.
+// Back to normal -> a toast and a log line only; leaving a lull isn't worth a notification.
+function maDeliver(kind, d){
+  log(`Market activity: ${d.title} — ${d.body}`, kind === 'quiet' ? 'warn' : 'ok');
+  maShowToast(kind, d);
+  if(kind !== 'quiet') return;
+  const s = xoLoadSettings();
+  if(s.sound) xoPlaySound('mixed', s.soundStyle, s.soundVol);
+  if(s.desktop && 'Notification' in window && Notification.permission === 'granted'){
+    try {
+      const n = new Notification(d.title, { body: d.body, tag: 'ma-quiet', silent: true });
+      n.onclick = () => { window.focus(); n.close(); };
+    } catch(e){ /* toasts still work */ }
+  }
+}
+
+async function maEvaluate(reason){
+  if(maBusy) return;
+  maBusy = true;
+  try {
+    const now = Date.now();
+    const per = await maPool(MA_BASKET, 4, async (sym) => {
+      try {
+        const r = await serverFetch({ action:'candles', symbol:sym, tf:'ONE_HOUR', market:dataMarket }, 20000);
+        if(!r.ok) return null;
+        return maSymbolRatios(maNormalize(await r.json(), now), now);
+      } catch(e){ return null; }
+    });
+    const agg = maAggregate(per);
+    const prev = maLoad();
+    const nxt = maNextState(prev.state, agg);
+    const rec = Object.assign({}, prev, { state: nxt.state, at: now });
+    if(agg){ rec.vol = agg.vol; rec.range = agg.range; rec.n = agg.n; rec.samples = agg.samples; }
+    if(nxt.changed || !prev.since) rec.since = now;
+    const alert = agg && maShouldAlert(prev.state, nxt.state, prev.lastAlertAt, now);
+    if(alert) rec.lastAlertAt = now;
+    maSave(rec);
+    maRenderPill(rec);
+    maLastEvalAt = now;
+    if(!agg){ if(reason === 'manual') log('Market activity: not enough recent candle data to judge','warn'); return; }
+    if(alert) maDeliver('quiet', maDescribe('quiet', agg));
+    else if(prev.state === 'quiet' && nxt.state !== 'quiet') maDeliver('normal', maDescribe('normal', agg));
+    else if(reason === 'manual') maShowToast(nxt.state === 'quiet' ? 'quiet' : 'info', maDescribe(nxt.state, agg));
+  } finally { maBusy = false; }
+}
+
+function maOnPillClick(){ maEvaluate('manual'); }
+
+// Re-check two minutes after each hour (the exchange has the closed candle by then), plus once shortly after
+// load and whenever the tab comes back after a long gap — timers stall while a laptop sleeps.
+function maSchedule(){
+  clearTimeout(maTimer);
+  const HOUR = 3600000, now = Date.now();
+  const wait = Math.max(1000, Math.ceil(now / HOUR) * HOUR + 2 * 60000 - now);
+  maTimer = setTimeout(() => { maEvaluate('hourly'); maSchedule(); }, wait);
+}
+function maStart(){
+  const last = maLoad();
+  if(last.state) maRenderPill(last);      // show the last known state immediately; stay hidden on the very first run until there's a reading
+  setTimeout(() => maEvaluate('startup'), 8000);
+  maSchedule();
+}
+document.addEventListener('visibilitychange', () => {
+  if(!document.hidden && Date.now() - maLastEvalAt > 45 * 60000){ maEvaluate('resume'); maSchedule(); }
+});
+window.addEventListener('load', maStart);
 
 // ── Sound ──
 // Synthesised with WebAudio, so there are no audio files to host or fail to load. Browsers keep audio

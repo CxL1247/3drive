@@ -232,6 +232,7 @@ node test/security.js     # proxy allowlist + alert hardening
 node test/backtest-xo.js  # the Trader XO edge lab below (offline — no network)
 node test/backtest-donchian.js  # the Donchian breakout edge lab (offline — no network)
 node test/journal-edit.js # journal validation + edit rules (src/journal-edit.js)
+node test/market-activity.js # quiet-market logic (src/market-activity.js)
 ```
 
 ## Trader XO edge lab
@@ -308,3 +309,26 @@ pill to **`polling · 30s`**, and refreshes prices (header, token list, floating
 through the proxy's ticker endpoint, only while the tab is visible. It keeps retrying the real socket in the
 background and switches back to **live** (and stops polling) as soon as one connects. 30 seconds because the
 proxy caches tickers for 15 seconds, so polling faster gains nothing and costs Netlify invocations.
+
+## Market activity alert (quiet-market warning)
+
+A pill in the top bar (**Market · normal / QUIET / ACTIVE**) tells you whether trading is unusually thin right
+now, so you can size down or wait. When the market turns **quiet** you also get a toast and, if enabled in your
+alert settings, a desktop notification (and the alert sound, if you've turned that on). Leaving a lull only
+shows a quiet toast. Click the pill to refresh it.
+
+How it decides (logic in `src/market-activity.js`, unit-tested in `test/market-activity.js`):
+
+- Every hour, two minutes after the candle closes, it reads 1H candles for 12 liquid coins through the proxy and
+  compares the **latest 4 closed hours with the same 4 hours on previous days** (volume has a strong
+  time-of-day pattern, so only the comparison with the same hours means anything).
+- **Weekdays are compared with weekdays and weekends with weekends**, so a normally slow Sunday doesn't cry
+  "quiet". The catch: one request returns about 12 days of hourly candles, so a weekend baseline rests on only
+  ~2 days and is noisier. The tooltip says when it is working from few comparable days.
+- The reading is the **median across the 12 coins**, so one coin's news can't trigger it.
+- **Quiet** = volume at or below **65%** of normal *and* price movement no bigger than normal (low volume during
+  a violent move is news, not a lull). It ends once volume recovers to **80%** (or movement jumps to 125%), so a
+  reading hovering at the line can't flip the alert on and off. At most one quiet alert per 3 hours.
+
+**The thresholds are untested defaults**, reasonable guesses, not calibrated on history. Expect to tune them
+(`MA_DEFAULTS` in `src/market-activity.js`) after a few weeks of seeing how often it fires.
