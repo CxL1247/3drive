@@ -294,3 +294,17 @@ number to judge a breakout system by (they win roughly a third of the time). The
 the *mechanics* (no look-ahead, correct fills, correct cost math, squeeze parity with `calcBBSqueeze`)
 and that the lab rejects a random walk while detecting real momentum. They cannot prove the rule works
 on real markets. Only running it against real candles can.
+
+
+## Live prices when Binance is unreachable
+
+Live prices come from Binance's WebSocket, opened **directly from your browser**. The scanner itself doesn't
+depend on that: candles and the token list are fetched server-side by the Netlify proxy. So on a network where
+the browser can't reach Binance (the console shows `net::ERR_NAME_NOT_RESOLVED` for `stream.binance.com`), the
+scan works but the header shows "—" and the pill never reaches "live".
+
+The app now detects this. After two failed connection attempts in a row it logs what happened, switches the
+pill to **`polling · 30s`**, and refreshes prices (header, token list, floating open-trade cards) every 30 seconds
+through the proxy's ticker endpoint, only while the tab is visible. It keeps retrying the real socket in the
+background and switches back to **live** (and stops polling) as soon as one connects. 30 seconds because the
+proxy caches tickers for 15 seconds, so polling faster gains nothing and costs Netlify invocations.

@@ -4097,6 +4097,15 @@ function updateStats(){
 
 // ── LIVE PRICES — WebSocket ──
 let ws = null;
+// Fallback for networks where Binance's socket can't be reached (ISP/DNS blocks: the browser reports
+// net::ERR_NAME_NOT_RESOLVED for stream.binance.com). The scanner itself keeps working in that case because
+// the Netlify proxy fetches candles server-side; only the browser's DIRECT live feed is cut. After
+// WS_FAILS_BEFORE_POLLING failed attempts in a row we poll the proxy's ticker endpoint instead.
+const WS_FAILS_BEFORE_POLLING = 2;
+const POLL_PRICES_MS = 30000;        // proxy caches tickers for 15s, so faster polling buys nothing; kept slow to spare Netlify usage
+let wsOpenedThisAttempt = false;
+let wsFailStreak = 0;
+let pricePollTimer = null;
 let lastPriceTick = 0;               // Date.now() of the last message received, of any symbol
 const WS_STALE_MS = 20000;           // ~20s with zero ticks on an "OPEN" socket = treat it as dead
 let wsWatchdogStarted = false;
@@ -4120,16 +4129,72 @@ function updateHeaderPrice(sym, price, chg) {
   }
 }
 
+// Apply one price update to everything that shows a live price. Shared by the Binance socket and the
+// proxy-polling fallback, so there is exactly one copy of this logic. `change24h` is optional: the socket
+// doesn't carry it, polling does.
+function applyPriceTick(sym, p, change24h) {
+  if(!(p > 0)) return;
+  const token = tokenData.find(t=>t.symbol===sym);
+  if(!token) return;
+  if(Number.isFinite(change24h)) token.change24h = change24h;
+  const prev = token.price;
+  if(prev === p) return;
+  token.price = p;
+
+  // Gainers & Losers rides the same live feed — update its price too,
+  // %change is derived from this on the next throttled repaint (glDirty below).
+  const gEntry = glMap.get(sym);
+  if(gEntry){ gEntry.price = p; glDirty = true; }
+
+  // Token detail popup, if it's currently open on this exact symbol
+  if(tdpSymbol === sym){
+    const tdpPriceEl = document.getElementById('tdpPrice');
+    if(tdpPriceEl) tdpPriceEl.textContent = fmtPrice(p);
+  }
+
+  // Table price cell
+  const el = document.getElementById('live-'+sym);
+  if(el){
+    el.textContent = fmtPrice(p);
+    el.className = p > prev ? 'price-up' : 'price-down';
+    setTimeout(()=>{ if(el) el.className = ''; }, 800);
+  }
+  // Mobile card price cell
+  const cel = document.getElementById('live-card-'+sym);
+  if(cel){
+    cel.textContent = fmtPrice(p);
+    cel.style.color = p > prev ? 'var(--green)' : 'var(--red)';
+    setTimeout(()=>{ if(cel) cel.style.color=''; }, 600);
+  }
+  // Header BTC/ETH
+  if(sym === 'BTC' || sym === 'ETH'){
+    const chg = token.change24h;
+    updateHeaderPrice(sym, p, chg);
+  }
+  // Ticker strip item
+  const tEl = document.getElementById('tick-'+sym);
+  if(tEl){
+    tEl.textContent = fmtPrice(p);
+    tEl.style.color = p > prev ? 'var(--green)' : 'var(--red)';
+    setTimeout(()=>{ if(tEl) tEl.style.color='var(--text)'; }, 500);
+  }
+}
+
 function startLivePrices() {
   if(!tokenData.length) return;
   if(ws){ ws.onclose = null; try{ws.close();}catch(e){} } // detach onclose first — otherwise it fires async and schedules a duplicate reconnect
   const streams = tokenData.map(t=>t.symbol.toLowerCase()+'usdt@miniTicker').join('/');
+  wsOpenedThisAttempt = false;
   try {
     ws = new WebSocket('wss://stream.binance.com:9443/stream?streams='+streams);
     ws.onopen = () => {
+      wsOpenedThisAttempt = true;
+      wsFailStreak = 0;
+      stopPricePolling();
       const dot = document.getElementById('liveDot');
       if(dot){ dot.className = 'live-dot active'; }
       document.getElementById('liveLabel').textContent = 'live';
+      const st = document.getElementById('liveStatus'); if(st) st.title = 'Click to force-reconnect live prices';
       log('Live prices connected','ok');
     };
     ws.onmessage = (evt) => {
@@ -4139,56 +4204,17 @@ function startLivePrices() {
       try {
         const tick = JSON.parse(evt.data).data;
         if(!tick||!tick.s) return;
-        const sym = tick.s.replace('USDT','');
-        const token = tokenData.find(t=>t.symbol===sym);
-        if(!token) return;
-        const p = parseFloat(tick.c);
-        const prev = token.price;
-        if(prev === p) return;
-        token.price = p;
-
-        // Gainers & Losers rides the same live feed — update its price too,
-        // %change is derived from this on the next throttled repaint (glDirty below).
-        const gEntry = glMap.get(sym);
-        if(gEntry){ gEntry.price = p; glDirty = true; }
-
-        // Token detail popup, if it's currently open on this exact symbol
-        if(tdpSymbol === sym){
-          const tdpPriceEl = document.getElementById('tdpPrice');
-          if(tdpPriceEl) tdpPriceEl.textContent = fmtPrice(p);
-        }
-
-        // Table price cell
-        const el = document.getElementById('live-'+sym);
-        if(el){
-          el.textContent = fmtPrice(p);
-          el.className = p > prev ? 'price-up' : 'price-down';
-          setTimeout(()=>{ if(el) el.className = ''; }, 800);
-        }
-        // Mobile card price cell
-        const cel = document.getElementById('live-card-'+sym);
-        if(cel){
-          cel.textContent = fmtPrice(p);
-          cel.style.color = p > prev ? 'var(--green)' : 'var(--red)';
-          setTimeout(()=>{ if(cel) cel.style.color=''; }, 600);
-        }
-        // Header BTC/ETH
-        if(sym === 'BTC' || sym === 'ETH'){
-          const chg = token.change24h;
-          updateHeaderPrice(sym, p, chg);
-        }
-        // Ticker strip item
-        const tEl = document.getElementById('tick-'+sym);
-        if(tEl){
-          tEl.textContent = fmtPrice(p);
-          tEl.style.color = p > prev ? 'var(--green)' : 'var(--red)';
-          setTimeout(()=>{ if(tEl) tEl.style.color='var(--text)'; }, 500);
-        }
+        applyPriceTick(tick.s.replace('USDT',''), parseFloat(tick.c));
       } catch(e){}
     };
     ws.onclose = () => {
       const dot = document.getElementById('liveDot');
-      if(dot){ dot.className = 'live-dot'; }
+      if(dot && !pricePollTimer){ dot.className = 'live-dot'; }   // polling mode keeps its own indicator
+      if(!wsOpenedThisAttempt){
+        wsFailStreak++;
+        if(wsFailStreak === 1) log("Live prices: couldn't reach Binance's price feed — retrying (your network may be blocking it)",'warn');
+        if(wsFailStreak >= WS_FAILS_BEFORE_POLLING) startPricePolling();
+      }
       setTimeout(startLivePrices, 5000);
     };
     ws.onerror = () => ws.close();
@@ -4212,6 +4238,40 @@ function startLivePrices() {
       }
     }, 7000);
   }
+}
+
+// ── Fallback live prices: poll the proxy while Binance's socket is unreachable ──
+function startPricePolling() {
+  if(pricePollTimer) return;
+  log(`Live prices: Binance feed unreachable from this network — using the server instead (refreshes every ${POLL_PRICES_MS/1000}s). Still retrying the live connection.`,'warn');
+  const dot = document.getElementById('liveDot'), label = document.getElementById('liveLabel'), st = document.getElementById('liveStatus');
+  if(dot) dot.className = 'live-dot active';
+  if(label) label.textContent = `polling · ${POLL_PRICES_MS/1000}s`;
+  if(st) st.title = "Binance's live feed is unreachable from this network, so prices refresh every " + (POLL_PRICES_MS/1000) + "s via the server. Click to retry the live connection.";
+  pollPricesOnce();
+  pricePollTimer = setInterval(() => { if(!document.hidden) pollPricesOnce(); }, POLL_PRICES_MS);
+}
+function stopPricePolling() {
+  if(!pricePollTimer) return;
+  clearInterval(pricePollTimer); pricePollTimer = null;
+  log('Live prices: Binance feed connected — polling stopped','ok');
+}
+async function pollPricesOnce() {
+  try {
+    const r = await serverFetch({ action:'tickers', n:200 }, 15000);
+    if(!r.ok) return;
+    const list = await r.json();
+    if(!Array.isArray(list)) return;
+    lastPriceTick = Date.now();
+    const fwSet = new Set((fwWsSymbols || '').split(',').filter(Boolean));
+    list.forEach(t => {
+      const sym = String(t.symbol || '').toUpperCase(), price = +t.price;
+      if(!sym || !(price > 0)) return;
+      applyPriceTick(sym, price, +t.change24h);
+      // floating open-trade cards normally get their own Binance socket (blocked here) — feed them from the same poll
+      if(fwSet.has(sym.toLowerCase()) && fwPrices[sym] !== price){ fwPrices[sym] = price; fwDirty = true; }
+    });
+  } catch(e) { /* best-effort: the next poll tries again */ }
 }
 
 // Click-to-reconnect on the live-status pill — immediate manual override, no need to wait
