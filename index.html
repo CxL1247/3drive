@@ -4128,6 +4128,16 @@ const POLL_PRICES_MS = 30000;        // proxy caches tickers for 15s, so faster 
 let wsOpenedThisAttempt = false;
 let wsFailStreak = 0;
 let pricePollTimer = null;
+let binanceLive = false;             // Binance's socket is open (the preferred source)
+// Fallback #1 when Binance is unreachable: Gate.io's public feed, opened straight from the browser (real-time, no
+// server in between). Fallback #2: the proxy poll above. Chosen by what the browser can actually reach.
+const GATE_WS_URL = 'wss://api.gateio.ws/ws/v4/';
+const GATE_BATCH = 25, GATE_SEND_GAP_MS = 120, GATE_PING_MS = 20000, GATE_MAX_TRIES = 3;
+let gateWs = null, gateLive = false, gateOpened = false, gateRetryTimer = null, gatePingTimer = null, gateSendTimer = null;
+let gateBatchId = 0, gateQueue = [], gateErrLogged = false;
+const gatePending = new Map();       // request id -> { pairs, tries }
+const gateSubscribed = new Set();    // pairs Gate confirmed
+const gateInvalid = new Set();       // pairs Gate said it doesn't list
 let lastPriceTick = 0;               // Date.now() of the last message received, of any symbol
 const WS_STALE_MS = 20000;           // ~20s with zero ticks on an "OPEN" socket = treat it as dead
 let wsWatchdogStarted = false;
@@ -4211,12 +4221,11 @@ function startLivePrices() {
     ws = new WebSocket('wss://stream.binance.com:9443/stream?streams='+streams);
     ws.onopen = () => {
       wsOpenedThisAttempt = true;
+      binanceLive = true;
       wsFailStreak = 0;
-      stopPricePolling();
-      const dot = document.getElementById('liveDot');
-      if(dot){ dot.className = 'live-dot active'; }
-      document.getElementById('liveLabel').textContent = 'live';
-      const st = document.getElementById('liveStatus'); if(st) st.title = 'Click to force-reconnect live prices';
+      stopPricePolling(true);
+      if(gateWs){ log("Live prices: Binance is reachable again — switching back from Gate.io",'ok'); stopGateFeed(); }
+      renderLivePill();
       log('Live prices connected','ok');
     };
     ws.onmessage = (evt) => {
@@ -4230,19 +4239,21 @@ function startLivePrices() {
       } catch(e){}
     };
     ws.onclose = () => {
-      const dot = document.getElementById('liveDot');
-      if(dot && !pricePollTimer){ dot.className = 'live-dot'; }   // polling mode keeps its own indicator
+      binanceLive = false;
       if(!wsOpenedThisAttempt){
         wsFailStreak++;
         if(wsFailStreak === 1) log("Live prices: couldn't reach Binance's price feed — retrying (your network may be blocking it)",'warn');
-        if(wsFailStreak >= WS_FAILS_BEFORE_POLLING) startPricePolling();
+        if(wsFailStreak >= WS_FAILS_BEFORE_POLLING) startFallbackFeeds();
       }
-      setTimeout(startLivePrices, 5000);
+      renderLivePill();
+      // once a fallback is carrying prices, probing Binance every 5s just fills the console with failed connections
+      setTimeout(startLivePrices, (gateLive || pricePollTimer) ? 30000 : 5000);
     };
     ws.onerror = () => ws.close();
   } catch(e){ log('WebSocket unavailable','err'); }
 
   lastPriceTick = Date.now(); // reset the clock on every (re)connect attempt, successful or not
+  gateSyncSubscriptions();    // the token list may have changed — no-op unless the Gate fallback is connected
   if(!wsWatchdogStarted){
     wsWatchdogStarted = true;
     // A WebSocket can silently die — wifi drops, network handoffs, sleep/wake, a flaky VPN —
@@ -4253,30 +4264,68 @@ function startLivePrices() {
     // more reliable than trusting readyState alone, which is exactly what the earlier
     // visibilitychange-only reconnect fix couldn't catch.
     setInterval(() => {
-      if(!ws) return;
+      // Only a socket that CLAIMS to be open can be "silently dead". In polling mode nothing claims to be live and
+      // ticks are ~30s apart, so judging staleness there would just spam reconnects.
+      const gateOpen = gateWs && gateWs.readyState === 1;
+      if(!binanceLive && !gateOpen) return;
       if(Date.now() - lastPriceTick > WS_STALE_MS){
         log('Live prices stale for 20s+ on a socket still reporting open — reconnecting','warn');
+        if(gateOpen){ try{ gateWs.close(); }catch(e){} }   // its onclose schedules the reconnect
         startLivePrices(); // handles detaching + closing the stale socket safely
       }
     }, 7000);
   }
 }
 
-// ── Fallback live prices: poll the proxy while Binance's socket is unreachable ──
+// ── Fallback live prices ──
+// Binance's socket is the preferred source. When this browser can't reach it (ISP/DNS blocks show up as
+// net::ERR_NAME_NOT_RESOLVED), we try Gate.io's public feed DIRECTLY from the browser (real-time), and in the
+// meantime — and for any coin Gate doesn't list — poll the proxy. The scanner itself never depends on any of this:
+// the Netlify proxy fetches candles server-side.
+
+// One pill, derived from state, so the label can never disagree with what is actually feeding prices.
+function renderLivePill() {
+  const dot = document.getElementById('liveDot'), label = document.getElementById('liveLabel'), st = document.getElementById('liveStatus');
+  if(!dot || !label) return;
+  if(binanceLive){
+    dot.className = 'live-dot active'; label.textContent = 'live';
+    if(st) st.title = 'Click to force-reconnect live prices';
+  } else if(gateLive){
+    dot.className = 'live-dot active'; label.textContent = 'live · gate';
+    if(st) st.title = "Binance's live feed is unreachable from this network, so prices stream directly from Gate.io (real-time)." +
+      (gateInvalid.size ? ` ${gateInvalid.size} token(s) Gate doesn't list refresh every ${POLL_PRICES_MS/1000}s via the server.` : '') + ' Click to retry Binance.';
+  } else if(pricePollTimer){
+    dot.className = 'live-dot active'; label.textContent = `polling · ${POLL_PRICES_MS/1000}s`;
+    if(st) st.title = "Binance's live feed is unreachable from this network, so prices refresh every " + (POLL_PRICES_MS/1000) + "s via the server. Click to retry the live connection.";
+  } else {
+    dot.className = 'live-dot';
+  }
+}
+
+// Every price source funnels through here, so cards and tables can't disagree about what feeds them
+function applyExternalTick(sym, price, change24h) {
+  applyPriceTick(sym, price, change24h);
+  // floating open-trade cards normally get their own Binance socket (unreachable here) — feed them from the fallback
+  if((',' + (fwWsSymbols || '') + ',').includes(',' + sym.toLowerCase() + ',') && fwPrices[sym] !== price){ fwPrices[sym] = price; fwDirty = true; }
+}
+
+function startFallbackFeeds() {
+  if(!pricePollTimer && !gateLive) log("Live prices: Binance's feed is unreachable from this network — trying Gate.io directly, and refreshing via the server in the meantime",'warn');
+  startGateFeed();
+  startPricePolling();   // bridge until Gate delivers its first tick; stays on only for tokens Gate doesn't list
+}
+
 function startPricePolling() {
   if(pricePollTimer) return;
-  log(`Live prices: Binance feed unreachable from this network — using the server instead (refreshes every ${POLL_PRICES_MS/1000}s). Still retrying the live connection.`,'warn');
-  const dot = document.getElementById('liveDot'), label = document.getElementById('liveLabel'), st = document.getElementById('liveStatus');
-  if(dot) dot.className = 'live-dot active';
-  if(label) label.textContent = `polling · ${POLL_PRICES_MS/1000}s`;
-  if(st) st.title = "Binance's live feed is unreachable from this network, so prices refresh every " + (POLL_PRICES_MS/1000) + "s via the server. Click to retry the live connection.";
   pollPricesOnce();
   pricePollTimer = setInterval(() => { if(!document.hidden) pollPricesOnce(); }, POLL_PRICES_MS);
+  renderLivePill();
 }
-function stopPricePolling() {
+function stopPricePolling(silent) {
   if(!pricePollTimer) return;
   clearInterval(pricePollTimer); pricePollTimer = null;
-  log('Live prices: Binance feed connected — polling stopped','ok');
+  if(!silent) log('Live prices: server polling stopped','ok');
+  renderLivePill();
 }
 async function pollPricesOnce() {
   try {
@@ -4285,15 +4334,123 @@ async function pollPricesOnce() {
     const list = await r.json();
     if(!Array.isArray(list)) return;
     lastPriceTick = Date.now();
-    const fwSet = new Set((fwWsSymbols || '').split(',').filter(Boolean));
     list.forEach(t => {
       const sym = String(t.symbol || '').toUpperCase(), price = +t.price;
       if(!sym || !(price > 0)) return;
-      applyPriceTick(sym, price, +t.change24h);
-      // floating open-trade cards normally get their own Binance socket (blocked here) — feed them from the same poll
-      if(fwSet.has(sym.toLowerCase()) && fwPrices[sym] !== price){ fwPrices[sym] = price; fwDirty = true; }
+      if(gateLive && gateSubscribed.has(sym + '_USDT')) return;   // Gate is streaming this one in real time — don't overwrite it with a 30s-old quote
+      applyExternalTick(sym, price, +t.change24h);
     });
   } catch(e) { /* best-effort: the next poll tries again */ }
+}
+
+// ── Gate.io direct feed ──
+function gateWantedPairs() {
+  const syms = new Set(tokenData.map(t => t.symbol));
+  (fwWsSymbols || '').split(',').filter(Boolean).forEach(x => syms.add(x.toUpperCase()));
+  // plain A-Z/0-9 tickers only: odd (non-ASCII) tickers would just be refused
+  return [...syms].filter(x => /^[A-Z0-9]{1,20}$/.test(x)).map(x => x + '_USDT');
+}
+function gateSend(obj) { try { gateWs.send(JSON.stringify(obj)); } catch(e){} }
+function gatePing() { if(gateWs && gateWs.readyState === 1) gateSend({ time: Math.floor(Date.now()/1000), channel:'spot.ping' }); }
+
+// Subscribe in small batches, spaced out so we never hit a rate limit. If Gate refuses a batch because ONE pair isn't
+// listed (it doesn't say which), the batch is split in half and retried until the bad pair is isolated and dropped.
+function gatePump() {
+  if(gateSendTimer || !gateWs || gateWs.readyState !== 1) return;
+  const job = gateQueue.shift();
+  if(!job) return;
+  const id = ++gateBatchId;
+  gatePending.set(id, job);
+  gateSend({ time: Math.floor(Date.now()/1000), id, channel:'spot.tickers', event:'subscribe', payload: job.pairs });
+  gateSendTimer = setTimeout(() => { gateSendTimer = null; gatePump(); }, GATE_SEND_GAP_MS);
+}
+function gateEnqueue(pairs) {
+  for(let i = 0; i < pairs.length; i += GATE_BATCH) gateQueue.push({ pairs: pairs.slice(i, i + GATE_BATCH), tries: 1 });
+  gatePump();
+}
+function gateSyncSubscriptions() {
+  if(!gateWs || gateWs.readyState !== 1) return;
+  const inFlight = new Set();
+  gatePending.forEach(j => j.pairs.forEach(x => inFlight.add(x)));
+  gateQueue.forEach(j => j.pairs.forEach(x => inFlight.add(x)));
+  const fresh = gateWantedPairs().filter(x => !gateSubscribed.has(x) && !gateInvalid.has(x) && !inFlight.has(x));
+  if(fresh.length) gateEnqueue(fresh);
+}
+function gateGoLive() {
+  gateLive = true;
+  log('Live prices: streaming directly from Gate.io (real-time)','ok');
+  if(!gateInvalid.size) stopPricePolling(true);
+  renderLivePill();
+}
+function gateOnMessage(evt) {
+  lastPriceTick = Date.now();
+  let m; try { m = JSON.parse(evt.data); } catch(e){ return; }
+  if(m.channel !== 'spot.tickers') return;
+  if(m.event === 'update' && m.result){
+    const pair = String(m.result.currency_pair || ''), price = parseFloat(m.result.last);
+    if(!pair.endsWith('_USDT') || !(price > 0)) return;
+    if(!gateLive) gateGoLive();
+    applyExternalTick(pair.slice(0, -5), price);          // change24h left to the scan: Gate's units aren't verified here
+    return;
+  }
+  if(m.event !== 'subscribe') return;
+  const job = gatePending.get(m.id);
+  if(!job) return;
+  gatePending.delete(m.id);
+  const failed = !!m.error || (m.result && m.result.status && m.result.status !== 'success');
+  if(!failed){ job.pairs.forEach(x => gateSubscribed.add(x)); return; }
+  const code = m.error && m.error.code;
+  if(code === 2){                                          // "invalid argument": one of these pairs isn't listed
+    if(job.pairs.length === 1){
+      gateInvalid.add(job.pairs[0]);
+      log(`Live prices: Gate.io doesn't list ${job.pairs[0].replace('_USDT','')} — it refreshes via the server instead`,'warn');
+      startPricePolling();                                 // cover the gap (no-op if already polling)
+      renderLivePill();
+    } else {
+      const mid = job.pairs.length >> 1;
+      gateQueue.unshift({ pairs: job.pairs.slice(0, mid), tries: 1 }, { pairs: job.pairs.slice(mid), tries: 1 });
+      gatePump();
+    }
+    return;
+  }
+  // any other refusal is NOT proof the pairs are bad (rate limit, server hiccup): retry a few times, never blacklist
+  if(!gateErrLogged){ gateErrLogged = true; log('Live prices: Gate.io refused a subscription (' + JSON.stringify(m.error || m.result) + ') — retrying','warn'); }
+  if(job.tries < GATE_MAX_TRIES) setTimeout(() => { gateQueue.push({ pairs: job.pairs, tries: job.tries + 1 }); gatePump(); }, 1000 * job.tries);
+}
+function gateScheduleRetry() {
+  clearTimeout(gateRetryTimer);
+  if(binanceLive) return;
+  gateRetryTimer = setTimeout(startGateFeed, gateOpened ? 5000 : 30000);
+}
+function startGateFeed() {
+  if(gateWs && gateWs.readyState <= 1) return;
+  clearTimeout(gateRetryTimer);
+  gateOpened = false; gateLive = false;
+  let sock;
+  try { sock = new WebSocket(GATE_WS_URL); } catch(e){ gateScheduleRetry(); return; }
+  gateWs = sock;
+  sock.onopen = () => {
+    if(gateWs !== sock) return;
+    gateOpened = true;
+    gateQueue = []; gatePending.clear(); gateSubscribed.clear();
+    clearInterval(gatePingTimer); gatePingTimer = setInterval(gatePing, GATE_PING_MS);
+    gateSyncSubscriptions();
+  };
+  sock.onmessage = (evt) => { if(gateWs === sock) gateOnMessage(evt); };
+  sock.onclose = () => {
+    if(gateWs !== sock) return;
+    gateLive = false; clearInterval(gatePingTimer); gateQueue = []; gatePending.clear(); gateSubscribed.clear();
+    if(!binanceLive) startPricePolling();                  // nothing real-time is feeding prices now
+    renderLivePill();
+    gateScheduleRetry();
+  };
+  sock.onerror = () => { try { sock.close(); } catch(e){} };
+}
+function stopGateFeed() {
+  clearTimeout(gateRetryTimer); clearInterval(gatePingTimer); clearTimeout(gateSendTimer); gateSendTimer = null;
+  const w = gateWs; gateWs = null; gateLive = false; gateOpened = false;
+  gateQueue = []; gatePending.clear(); gateSubscribed.clear(); gateErrLogged = false;
+  if(w){ w.onclose = null; try { w.close(); } catch(e){} }
 }
 
 // Click-to-reconnect on the live-status pill — immediate manual override, no need to wait
@@ -8491,6 +8648,7 @@ function fwSyncFeed(openTrades){
   const key = symbols.sort().join(',');
   if(key === fwWsSymbols && fwWs) return; // already subscribed to the right set
   fwWsSymbols = key;
+  gateSyncSubscriptions();   // if the Gate fallback is carrying prices, add the new symbols to it
   if(fwWs){ try{fwWs.close();}catch(e){} }
   const streams = symbols.map(s=>s+'usdt@miniTicker').join('/');
   try {

@@ -299,16 +299,28 @@ on real markets. Only running it against real candles can.
 
 ## Live prices when Binance is unreachable
 
-Live prices come from Binance's WebSocket, opened **directly from your browser**. The scanner itself doesn't
-depend on that: candles and the token list are fetched server-side by the Netlify proxy. So on a network where
-the browser can't reach Binance (the console shows `net::ERR_NAME_NOT_RESOLVED` for `stream.binance.com`), the
-scan works but the header shows "—" and the pill never reaches "live".
+Live prices come from Binance's WebSocket, opened **directly from your browser**. The scanner doesn't depend on
+that: candles and the token list are fetched server-side by the Netlify proxy. So on a network where the browser
+can't reach Binance (the console shows `net::ERR_NAME_NOT_RESOLVED` for `stream.binance.com`), the scan works but
+the header would show "—" and the pill would never reach "live".
 
-The app now detects this. After two failed connection attempts in a row it logs what happened, switches the
-pill to **`polling · 30s`**, and refreshes prices (header, token list, floating open-trade cards) every 30 seconds
-through the proxy's ticker endpoint, only while the tab is visible. It keeps retrying the real socket in the
-background and switches back to **live** (and stops polling) as soon as one connects. 30 seconds because the
-proxy caches tickers for 15 seconds, so polling faster gains nothing and costs Netlify invocations.
+The app now picks a source by what the browser can actually reach:
+
+1. **Binance** (preferred). Pill: `live`.
+2. **Gate.io, straight from the browser**: real-time, no server in between. Used after two failed Binance
+   attempts. Pill: `live · gate`. Subscriptions go out in small batches; if Gate refuses a batch because one coin
+   isn't listed (it doesn't say which), the batch is split in half until that coin is isolated and dropped. Any
+   other error is retried a few times and never blacklists a coin. The 24h change % stays at its scan value
+   (Gate's units aren't verified here).
+3. **The proxy**, polled every 30s while the tab is visible. Pill: `polling · 30s`. It bridges until Gate delivers
+   its first tick, and stays on only for coins Gate doesn't list. It never overwrites a coin Gate is streaming.
+
+Binance is re-probed every 30s while a fallback is active and takes over again as soon as it connects (the Gate
+socket is closed). The floating open-trade cards use whichever source is active. The pill tooltip says which
+source is feeding prices and how many coins are on the slower path.
+
+Not covered: features that open their own Binance connection, such as the live order-book depth in the token
+popup, still need Binance to be reachable.
 
 ## Market activity alert (quiet-market warning)
 
